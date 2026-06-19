@@ -1,11 +1,12 @@
 import PageHeader from "@/components/PageHeader";
 import TriageClient from "@/components/TriageClient";
 import { NotReady } from "@/components/common";
+import { getDistinct } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-export default function TriagePage() {
+export default async function TriagePage() {
   if (!hasSupabase()) {
     return (
       <>
@@ -14,10 +15,11 @@ export default function TriagePage() {
       </>
     );
   }
+  const { brands } = await getDistinct();
   return (
     <>
-      <PageHeader title="ศูนย์จัดการด่วน" subtitle="คิวคอมเมนต์ด่วน — รับเรื่อง / มอบหมาย / ปิดงาน" />
-      <TriageClient />
+      <PageHeader title="ศูนย์จัดการด่วน" subtitle="คิวคอมเมนต์ด่วน — รับเรื่อง / มอบหมาย / ตอบกลับ / ปิดงาน" />
+      <TriageClient brands={brands} />
     </>
   );
 }

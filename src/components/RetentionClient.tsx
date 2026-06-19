@@ -291,7 +291,9 @@ export default function RetentionClient({ data }: { data: RetentionBundle }) {
                 <BarChart data={data.gap} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                   <CartesianGrid stroke="#eef0f3" vertical={false} /><XAxis dataKey="bucket" tick={{ fill: "#9aa1ad", fontSize: 11 }} tickLine={false} axisLine={false} /><YAxis tick={{ fill: "#9aa1ad", fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e6e8ec", fontSize: 12 }} formatter={(v: number) => numTh(v) + " ครั้ง"} />
-                  <Bar dataKey="n" name="จำนวน" fill="#4e7d63" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="n" name="จำนวน" radius={[3, 3, 0, 0]}>
+                    {data.gap.map((_, i) => <Cell key={i} fill={["#22c55e", "#84cc16", "#eab308", "#f59e0b", "#f97316", "#ef4444"][i] || "#94a3b8"} />)}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </Card>

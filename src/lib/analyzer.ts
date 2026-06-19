@@ -33,6 +33,28 @@ function hitsAny(text: string, keywords: string[]): boolean {
   const t = (text || "").toLowerCase();
   return keywords.some((k) => t.includes(k.toLowerCase()));
 }
+
+// ---------- จำแนกหมวดแบบ keyword (ฉลาดขึ้นโดยไม่ต้องใช้ AI) ----------
+const CATEGORY_KEYWORDS: { cat: string; words: string[] }[] = [
+  { cat: "ความปลอดภัย/สุขภาพ", words: ["แพ้", "ผื่น", "คัน", "ระคายเคือง", "อันตราย", "หมดอายุ", "เน่า", "ขึ้นรา", "บวม", "แสบ", "ปวด"] },
+  { cat: "การจัดส่ง", words: ["ส่ง", "จัดส่ง", "ขนส่ง", "พัสดุ", "ช้า", "นาน", "ไม่ได้ของ", "ของหาย", "ตกหล่น", "kerry", "flash", "ล่าช้า", "ส่งผิด", "รอนาน", "ส่งเร็ว", "ส่งไว"] },
+  { cat: "บรรจุภัณฑ์", words: ["กล่อง", "แพ็ค", "ห่อ", "บุบ", "บรรจุภัณฑ์", "ซีล", "แตกหัก", "หีบห่อ", "กันกระแทก"] },
+  { cat: "การชำระเงิน", words: ["จ่าย", "ชำระ", "โอน", "เก็บเงินปลายทาง", "ปลายทาง", "payment", "บัตร", "หักเงิน", "คิดเงิน"] },
+  { cat: "ราคา/โปรโมชั่น", words: ["ราคา", "แพง", "ถูก", "โปร", "ส่วนลด", "คูปอง", "คุ้ม", "โปรโมชั่น", "ลดราคา", "แถม"] },
+  { cat: "การบริการ/แอดมิน", words: ["แอดมิน", "ตอบ", "บริการ", "ทักแชท", "ไม่ตอบ", "มารยาท", "พูดจา", "ร้านดี", "ร้านน่ารัก", "ตอบเร็ว", "ตอบช้า"] },
+  { cat: "คุณภาพสินค้า", words: ["พัง", "เสีย", "ชำรุด", "แตก", "ไม่ตรงปก", "ปลอม", "ของแท้", "คุณภาพ", "ใช้ไม่ได้", "ห่วย", "ของดี", "ใช้ดี", "ตรงปก", "งานดี", "ของไม่ดี", "ไม่เหมือนรูป"] },
+];
+
+/** เดาหมวดจากคำในข้อความ — คืน null ถ้าไม่เข้าเกณฑ์ */
+function classifyCategory(text: string): string | null {
+  const t = (text || "").toLowerCase();
+  let best: { cat: string; score: number } | null = null;
+  for (const { cat, words } of CATEGORY_KEYWORDS) {
+    const score = words.reduce((s, w) => s + (t.includes(w) ? 1 : 0), 0);
+    if (score > 0 && (!best || score > best.score)) best = { cat, score };
+  }
+  return best?.cat ?? null;
+}
 const hitsHardDanger = (t: string) => hitsAny(t, URGENT_RULES.hard_danger_keywords);
 const hitsSoftFlag = (t: string) => hitsAny(t, URGENT_RULES.soft_flag_keywords);
 
@@ -46,7 +68,7 @@ export function ruleBasedOne(c: RawComment): Analysis {
 
   return {
     sentiment,
-    category: sentiment === "positive" ? POSITIVE_CATEGORY : "อื่น ๆ",
+    category: sentiment === "positive" ? POSITIVE_CATEGORY : (classifyCategory(text) ?? "อื่น ๆ"),
     severity,
     summary: truncate(text, 80),
     suggested_action: "",

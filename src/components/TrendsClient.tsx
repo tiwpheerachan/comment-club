@@ -11,7 +11,8 @@ type BrandDaily = { date: string; brand: string; total: number; urgent: number; 
 type CatDaily = { date: string; category: string; total: number };
 
 const RANGES = [30, 90, 180, 365];
-const LINE_COLORS = ["#4e7d63", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+// พาเลตสีสดแยกชัด (ไม่ให้สีกลืนกัน)
+const LINE_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6", "#6366f1", "#eab308"];
 
 export default function TrendsClient({
   daily, brandDaily, categoryDaily, products,
