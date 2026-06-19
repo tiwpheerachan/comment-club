@@ -57,6 +57,7 @@ export interface CommentFilters {
   category?: string;
   status?: string;
   assignee?: string;
+  brandsIn?: string[]; // จำกัดเฉพาะแบรนด์เหล่านี้ (สิทธิ์การเข้าถึง)
   urgentOnly?: boolean;
   minSeverity?: number;
   q?: string;
@@ -176,6 +177,7 @@ export async function listComments(f: CommentFilters): Promise<{ rows: CommentRo
 
   let query = sb.from("comments").select(COMMENT_COLS, { count: "exact" });
 
+  if (f.brandsIn && f.brandsIn.length) query = query.in("brand", f.brandsIn);
   if (f.brand) query = query.eq("brand", f.brand);
   if (f.product) query = query.eq("product_name", f.product);
   if (f.sentiment) query = query.eq("sentiment", f.sentiment);

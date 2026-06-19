@@ -1,6 +1,7 @@
 import PageHeader from "@/components/PageHeader";
 import ProductsGrid from "@/components/ProductsGrid";
 import { NotReady } from "@/components/common";
+import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getProductStats } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
 
@@ -8,8 +9,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ProductsPage() {
   const configured = hasSupabase();
+  const allowed = allowedBrandsOf(await getCurrentProfile());
   const all = configured ? await getProductStats({ worstFirst: true, limit: 2000 }) : [];
-  const products = all.filter((p) => p.total >= 2);
+  const products = all.filter((p) => p.total >= 2 && (!allowed || (p.brand != null && allowed.includes(p.brand))));
 
   if (products.length === 0) {
     return (

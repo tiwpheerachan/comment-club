@@ -1,6 +1,7 @@
 import ExploreClient from "@/components/ExploreClient";
 import PageHeader from "@/components/PageHeader";
 import { NotReady } from "@/components/common";
+import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getDistinct } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
 
@@ -21,7 +22,9 @@ export default async function ExplorePage({
     );
   }
   const sp = await searchParams;
-  const { brands, categories } = await getDistinct();
+  const allowed = allowedBrandsOf(await getCurrentProfile());
+  const { brands: allBrands, categories } = await getDistinct();
+  const brands = allowed ? allBrands.filter((b) => allowed.includes(b)) : allBrands;
 
   return (
     <>

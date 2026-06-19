@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Thai, Poppins, Yellowtail } from "next/font/google";
 import Sidebar from "@/components/Sidebar";
+import { getCurrentProfile } from "@/lib/auth";
 import "./globals.css";
 
 const fontThai = IBM_Plex_Sans_Thai({
@@ -17,14 +18,19 @@ export const metadata: Metadata = {
   description: "commentclub: วิเคราะห์คอมเมนต์ Shopee + Customer Retention จาก BigQuery ด้วย AI",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const profile = await getCurrentProfile();
   return (
     <html lang="th" className={`${fontThai.variable} ${fontScript.variable} ${fontDisplay.variable}`}>
       <body className="font-sans antialiased">
-        <div className="flex min-h-screen bg-[#f6f7f9]">
-          <Sidebar />
-          <main className="flex-1 min-w-0">{children}</main>
-        </div>
+        {profile ? (
+          <div className="flex min-h-screen bg-[#f6f7f9]">
+            <Sidebar user={{ name: profile.name, email: profile.email, role: profile.role }} />
+            <main className="flex-1 min-w-0">{children}</main>
+          </div>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

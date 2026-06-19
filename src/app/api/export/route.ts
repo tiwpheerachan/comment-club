@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { listComments } from "@/lib/db";
 import { parseFilters } from "@/lib/parseFilters";
 
@@ -12,6 +13,8 @@ function csvCell(v: unknown): string {
 
 export async function GET(req: NextRequest) {
   const f = parseFilters(req.nextUrl.searchParams);
+  const allowed = allowedBrandsOf(await getCurrentProfile());
+  if (allowed) f.brandsIn = allowed;
   f.pageSize = 200;
   const cols = [
     "comment_id", "created_at", "brand", "product_name", "rating", "sentiment",

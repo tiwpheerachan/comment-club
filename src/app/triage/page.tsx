@@ -1,6 +1,7 @@
 import PageHeader from "@/components/PageHeader";
 import TriageClient from "@/components/TriageClient";
 import { NotReady } from "@/components/common";
+import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getDistinct, getTeam } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
 
@@ -15,7 +16,9 @@ export default async function TriagePage() {
       </>
     );
   }
-  const [{ brands }, team] = await Promise.all([getDistinct(), getTeam()]);
+  const [{ brands: allBrands }, team, profile] = await Promise.all([getDistinct(), getTeam(), getCurrentProfile()]);
+  const allowed = allowedBrandsOf(profile);
+  const brands = allowed ? allBrands.filter((b) => allowed.includes(b)) : allBrands;
   return (
     <>
       <PageHeader title="ศูนย์จัดการด่วน" subtitle="คิวคอมเมนต์ด่วน — รับเรื่อง / มอบหมาย / ตอบกลับ / ปิดงาน" />

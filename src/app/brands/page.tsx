@@ -2,6 +2,7 @@ import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
 import { NotReady, ScorePill, SentimentBar } from "@/components/common";
 import { Star } from "@/components/icons";
+import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getBrandStats } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
 import { fmtScore } from "@/lib/ui";
@@ -10,7 +11,9 @@ export const dynamic = "force-dynamic";
 
 export default async function BrandsPage() {
   const configured = hasSupabase();
-  const brands = configured ? await getBrandStats() : [];
+  const allowed = allowedBrandsOf(await getCurrentProfile());
+  const all = configured ? await getBrandStats() : [];
+  const brands = allowed ? all.filter((b) => allowed.includes(b.brand)) : all;
 
   if (brands.length === 0) {
     return (
