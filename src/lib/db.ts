@@ -56,6 +56,7 @@ export interface CommentFilters {
   sentiment?: string;
   category?: string;
   status?: string;
+  assignee?: string;
   urgentOnly?: boolean;
   minSeverity?: number;
   q?: string;
@@ -180,6 +181,7 @@ export async function listComments(f: CommentFilters): Promise<{ rows: CommentRo
   if (f.sentiment) query = query.eq("sentiment", f.sentiment);
   if (f.category) query = query.eq("category", f.category);
   if (f.status) query = query.eq("status", f.status);
+  if (f.assignee) query = query.eq("assignee", f.assignee);
   if (f.urgentOnly) query = query.eq("urgent", true);
   if (typeof f.minSeverity === "number") query = query.gte("severity", f.minSeverity);
   if (f.from) query = query.gte("created_at", f.from);
@@ -246,6 +248,33 @@ export interface RetentionBundle {
   brandmix: { bucket: string; customers: number }[];
   review: { grp: string; customers: number; repeat_rate: number }[];
   kpi: Record<string, number>;
+}
+
+// ---------- ทีม / กิจกรรม ----------
+export interface TeamMember { name: string; role: string | null; updated_at?: string }
+export interface Activity { id: number; actor: string | null; action: string | null; comment_id: string | null; detail: string | null; created_at: string }
+
+export async function getTeam(): Promise<TeamMember[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const { data } = await sb.from("team_members").select("*").order("name");
+  return (data as TeamMember[]) ?? [];
+}
+export async function upsertTeamMember(name: string, role?: string): Promise<void> {
+  const sb = getServiceClient();
+  if (!sb || !name.trim()) return;
+  await sb.from("team_members").upsert({ name: name.trim(), role: role || null, updated_at: new Date().toISOString() }, { onConflict: "name" });
+}
+export async function getActivity(limit = 50): Promise<Activity[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const { data } = await sb.from("activity_log").select("*").order("created_at", { ascending: false }).limit(limit);
+  return (data as Activity[]) ?? [];
+}
+export async function logActivity(a: { actor?: string | null; action: string; comment_id?: string | null; detail?: string | null }): Promise<void> {
+  const sb = getServiceClient();
+  if (!sb) return;
+  await sb.from("activity_log").insert({ actor: a.actor || null, action: a.action, comment_id: a.comment_id || null, detail: a.detail || null });
 }
 
 export async function getRetention(): Promise<RetentionBundle> {

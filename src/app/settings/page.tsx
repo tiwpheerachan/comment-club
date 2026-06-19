@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import PageHeader from "@/components/PageHeader";
+import ProfileSettings from "@/components/ProfileSettings";
 import RunPipelineButton from "@/components/RunPipelineButton";
 import { AI, BIGQUERY, COLUMNS, PIPELINE, URGENT_RULES } from "@/lib/config";
-import { getRuns } from "@/lib/db";
+import { getActivity, getDistinct, getRuns, getTeam } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +27,57 @@ export default async function SettingsPage() {
     existsSync(resolve(process.cwd(), "service-account.json"));
   const anthropicOk = Boolean(process.env.ANTHROPIC_API_KEY);
 
-  const runs = supabaseOk ? await getRuns(10) : [];
+  const [runs, team, activity, distinct] = supabaseOk
+    ? await Promise.all([getRuns(10), getTeam(), getActivity(40), getDistinct()])
+    : [[], [], [], { brands: [], categories: [] }];
 
   return (
     <>
-      <PageHeader title="ตั้งค่า" subtitle="สถานะการเชื่อมต่อ • mapping คอลัมน์ • เกณฑ์ • ประวัติการรัน" />
+      <PageHeader title="ตั้งค่า" subtitle="โปรไฟล์ & ทีม • การเชื่อมต่อ • mapping • กิจกรรม" />
       <div className="px-7 pt-6 pb-16 max-w-[1100px] space-y-4">
+        {/* profile */}
+        <div className="card card-pad">
+          <h3 className="kpi-label mb-3">โปรไฟล์ของฉัน</h3>
+          <ProfileSettings brands={distinct.brands} />
+        </div>
+
+        {/* team + activity */}
+        <div className="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
+          <div className="card card-pad">
+            <h3 className="kpi-label mb-3">ทีม ({team.length})</h3>
+            {team.length === 0 ? (
+              <div className="text-muted text-sm">ยังไม่มีสมาชิก — ตั้งชื่อโปรไฟล์เพื่อเพิ่มตัวเองเข้าทีม</div>
+            ) : (
+              <div className="space-y-2">
+                {team.map((m) => (
+                  <div key={m.name} className="flex items-center gap-2.5 text-sm">
+                    <span className="w-7 h-7 rounded-full bg-cc/15 text-cc flex items-center justify-center text-xs font-bold flex-none">{m.name.charAt(0).toUpperCase()}</span>
+                    <span className="font-medium">{m.name}</span>
+                    {m.role && <span className="text-muted text-xs">· {m.role}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="card card-pad">
+            <h3 className="kpi-label mb-3">กิจกรรมล่าสุด (ใครทำอะไร)</h3>
+            {activity.length === 0 ? (
+              <div className="text-muted text-sm">ยังไม่มีกิจกรรม</div>
+            ) : (
+              <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1 text-[13px]">
+                {activity.map((a) => (
+                  <div key={a.id} className="flex items-start gap-2 border-b border-[#eef0f3] last:border-0 pb-1.5">
+                    <span className="font-semibold text-ink">{a.actor || "ไม่ระบุ"}</span>
+                    <span className="text-muted">{a.action}</span>
+                    {a.detail && <span className="text-muted truncate">{a.detail}</span>}
+                    <span className="text-muted text-[11px] ml-auto whitespace-nowrap">{new Date(a.created_at).toLocaleString("th-TH")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* connection */}
         <div className="card card-pad">
           <h3 className="kpi-label mb-2">สถานะการเชื่อมต่อ</h3>

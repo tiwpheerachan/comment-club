@@ -10,6 +10,7 @@ export function parseFilters(sp: URLSearchParams): CommentFilters {
     sentiment: sp.get("sentiment") || undefined,
     category: sp.get("category") || undefined,
     status: sp.get("status") || undefined,
+    assignee: sp.get("assignee") || undefined,
     urgentOnly: sp.get("urgent") === "1" || sp.get("urgent") === "true",
     minSeverity: num("minSeverity"),
     q: sp.get("q") || undefined,

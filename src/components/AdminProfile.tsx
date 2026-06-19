@@ -7,7 +7,11 @@ export default function AdminProfile() {
   const [edit, setEdit] = useState(false);
   useEffect(() => setName(getAdminName()), []);
 
-  const save = (v: string) => { setAdminName(v); setName(v.trim()); setEdit(false); };
+  const save = (v: string) => {
+    const n = v.trim();
+    setAdminName(n); setName(n); setEdit(false);
+    if (n) fetch("/api/team", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n }) }).catch(() => {});
+  };
   const initial = (name || "?").trim().charAt(0).toUpperCase();
 
   return (

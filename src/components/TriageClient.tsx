@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { getAdminName } from "@/lib/admin";
+import { getAdminName, getDefaultBrand } from "@/lib/admin";
 import type { CommentRow } from "@/lib/db";
 import { suggestReply } from "@/lib/reply";
 import { sevColors } from "@/lib/ui";
@@ -8,23 +8,28 @@ import { Chat, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 
 const TABS = [
+ { key: "mine", label: "งานของฉัน" },
  { key: "new", label: "ยังไม่จัดการ" },
  { key: "in_progress", label: "กำลังจัดการ" },
  { key: "resolved", label: "จัดการแล้ว" },
  { key: "", label: "ทั้งหมด" },
 ];
 
-export default function TriageClient({ brands = [] }: { brands?: string[] }) {
+export default function TriageClient({ brands = [], team = [] }: { brands?: string[]; team?: string[] }) {
  const [tab, setTab] = useState("new");
  const [brand, setBrand] = useState("");
+ const [me, setMe] = useState("");
  const [rows, setRows] = useState<CommentRow[]>([]);
  const [loading, setLoading] = useState(true);
  const [busy, setBusy] = useState<string | null>(null);
 
+ useEffect(() => { setMe(getAdminName()); const d = getDefaultBrand(); if (d) setBrand(d); }, []);
+
  const load = useCallback(async () => {
  setLoading(true);
  const q = new URLSearchParams({ urgent: "1", sort: "severity_desc", pageSize: "100" });
- if (tab) q.set("status", tab);
+ if (tab === "mine") q.set("assignee", me || "___none___");
+ else if (tab) q.set("status", tab);
  if (brand) q.set("brand", brand);
  try {
  const res = await fetch("/api/comments?" + q.toString());
@@ -34,14 +39,14 @@ export default function TriageClient({ brands = [] }: { brands?: string[] }) {
  setRows([]);
  }
  setLoading(false);
- }, [tab, brand]);
+ }, [tab, brand, me]);
 
  useEffect(() => { load(); }, [load]);
 
  async function patch(comment_id: string, fields: Record<string, string>) {
  setBusy(comment_id);
  try {
- await fetch("/api/triage", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment_id, ...fields }) });
+ await fetch("/api/triage", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment_id, actor: getAdminName() || null, ...fields }) });
  await load();
  } catch { alert("อัปเดตไม่สำเร็จ"); }
  setBusy(null);
@@ -111,7 +116,10 @@ export default function TriageClient({ brands = [] }: { brands?: string[] }) {
  {r.status !== "in_progress" && <button disabled={busy === r.comment_id} onClick={() => patch(r.comment_id, { status: "in_progress", ...(getAdminName() ? { assignee: getAdminName() } : {}) })} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neu-bg text-neu disabled:opacity-50">รับเรื่อง</button>}
  {r.status !== "resolved" && <button disabled={busy === r.comment_id} onClick={() => patch(r.comment_id, { status: "resolved", ...(getAdminName() ? { assignee: getAdminName() } : {}) })} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-pos-bg text-pos disabled:opacity-50">ปิดงาน</button>}
  {r.status !== "new" && <button disabled={busy === r.comment_id} onClick={() => patch(r.comment_id, { status: "new" })} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-ink disabled:opacity-50">กลับเป็นยังไม่จัดการ</button>}
- <input defaultValue={r.assignee ?? ""} placeholder="มอบหมายให้… (Enter)" onKeyDown={(e) => { if (e.key === "Enter") patch(r.comment_id, { assignee: (e.target as HTMLInputElement).value }); }} className="bg-white border border-line px-2.5 py-1.5 rounded-lg text-xs w-[180px]" />
+ <select value={r.assignee ?? ""} onChange={(e) => patch(r.comment_id, { assignee: e.target.value })} className="bg-white border border-line px-2.5 py-1.5 rounded-lg text-xs" title="มอบหมาย/ส่งต่อให้">
+ <option value="">มอบหมายให้…</option>
+ {[...new Set([...team, ...(r.assignee && !team.includes(r.assignee) ? [r.assignee] : [])])].map((m) => <option key={m} value={m}>{m}</option>)}
+ </select>
  </div>
 
  <ReplyBox comment={r} onSent={load} />

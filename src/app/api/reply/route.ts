@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logActivity } from "@/lib/db";
 import { getServiceClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, unknown> = { note: reply_text, status: "in_progress" };
     if (replied_by) patch.assignee = replied_by;
     await sb.from("comments").update(patch).eq("comment_id", String(comment_id));
+    await logActivity({ actor: replied_by, action: "ตอบกลับลูกค้า", comment_id: String(comment_id), detail: reply_text.slice(0, 80) });
 
     return NextResponse.json({
       ok: true,
