@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #f5f6f8;
+  color: #1c2330;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* การ์ดมาตรฐาน */
+.card {
+  @apply bg-white border border-line rounded-2xl shadow-card;
+}
+
+.card-pad {
+  @apply p-5;
+}
+
+.section-title {
+  @apply flex items-center gap-2 text-[15px] font-bold text-ink mt-7 mb-3;
+}
+
+.pill {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold;
+}
+
+.chip {
+  @apply inline-flex items-center gap-1.5 text-[12.5px] bg-[#f9fafb] border border-line px-3 py-1.5 rounded-full mr-1.5 mb-1.5 text-ink;
+}
+
+.kpi-label {
+  @apply text-[11px] text-muted font-semibold uppercase tracking-wide flex items-center gap-1.5;
+}

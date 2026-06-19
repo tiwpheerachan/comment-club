@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shopee Comment AI — ศูนย์วิเคราะห์คอมเมนต์</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#f5f6f8; --surface:#ffffff; --surface2:#f9fafb;
+    --line:#e6e8ec; --line2:#eef0f3;
+    --txt:#1c2330; --muted:#6b7280; --muted2:#9aa1ad;
+    --pos:#16a34a; --pos-bg:#e8f7ee;
+    --neg:#dc2626; --neg-bg:#fdecec;
+    --neu:#d97706; --neu-bg:#fdf3e3;
+    --accent:#ee4d2d; --accent2:#ff6b3d;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+    --shadow-lg:0 4px 16px rgba(16,24,40,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Sukhumvit Set","IBM Plex Sans Thai","Segoe UI",system-ui,-apple-system,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased;}
+  svg{display:block;}
+  .icon{width:18px;height:18px;stroke:currentColor;stroke-width:1.8;fill:none;
+    stroke-linecap:round;stroke-linejoin:round;flex:none;}
+  .icon-sm{width:15px;height:15px;}
+  .icon-lg{width:22px;height:22px;}
+
+  header{background:var(--surface);border-bottom:1px solid var(--line);
+    padding:14px 28px;display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:14px;position:sticky;top:0;z-index:10;}
+  .brand-logo{display:flex;align-items:center;gap:11px;}
+  .brand-logo .mark{width:38px;height:38px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:var(--shadow);}
+  .brand-logo h1{font-size:17px;font-weight:700;letter-spacing:-.2px;}
+  .brand-logo .meta{font-size:12.5px;color:var(--muted);margin-top:1px;}
+  .controls{display:flex;gap:10px;align-items:center;}
+
+  select{background:var(--surface);color:var(--txt);border:1px solid var(--line);
+    padding:9px 12px;border-radius:9px;font-size:14px;font-family:inherit;cursor:pointer;
+    box-shadow:var(--shadow);}
+  select:hover{border-color:var(--muted2);}
+  button{display:inline-flex;align-items:center;gap:7px;
+    background:var(--accent);color:#fff;border:none;padding:9px 15px;border-radius:9px;
+    cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;box-shadow:var(--shadow);
+    transition:filter .15s;}
+  button:hover{filter:brightness(1.05);}
+  button:disabled{opacity:.6;cursor:default;}
+
+  .wrap{padding:24px 28px 60px;max-width:1320px;margin:0 auto;}
+  .grid{display:grid;gap:16px;}
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin-bottom:18px;}
+  .two{grid-template-columns:1.5fr 1fr;}
+  @media(max-width:900px){.two{grid-template-columns:1fr;}}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;box-shadow:var(--shadow);}
+  .card h3{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;
+    text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:7px;}
+
+  .kpi .big{font-size:28px;font-weight:800;letter-spacing:-.5px;line-height:1.15;}
+  .kpi .sub{font-size:12.5px;color:var(--muted);margin-top:4px;}
+  .kpi-head{display:flex;align-items:center;justify-content:space-between;}
+  .kpi-ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;
+    justify-content:center;}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;
+    font-size:12px;font-weight:700;}
+
+  .section-title{font-size:15px;font-weight:700;margin:26px 0 13px;
+    display:flex;align-items:center;gap:8px;color:var(--txt);}
+  .section-title .icon{color:var(--accent);}
+
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line2);vertical-align:top;}
+  th{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
+  tr:last-child td{border-bottom:none;}
+  .sev{display:inline-flex;align-items:center;justify-content:center;min-width:30px;
+    font-weight:800;padding:3px 8px;border-radius:7px;font-size:13px;}
+
+  .brand-row{display:flex;align-items:center;gap:16px;padding:13px 0;border-bottom:1px solid var(--line2);}
+  .brand-row:last-child{border-bottom:none;}
+  .brand-name{min-width:150px;flex:none;}
+  .brand-name b{font-size:14.5px;}
+  .brand-name .sub{font-size:12px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px;}
+  .bar{height:9px;border-radius:6px;background:var(--surface2);overflow:hidden;display:flex;flex:1;min-width:120px;}
+  .bar i{height:100%;display:block;}
+  .brand-end{text-align:right;min-width:130px;flex:none;}
+
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--surface2);
+    border:1px solid var(--line);padding:5px 11px;border-radius:999px;margin:3px 5px 3px 0;color:var(--txt);}
+  .chip b{color:var(--accent);}
+  .muted{color:var(--muted);}
+  .urgent-text{font-size:13.5px;color:var(--txt);margin-top:2px;line-height:1.5;}
+  .action{font-size:12.5px;color:var(--accent);margin-top:5px;display:flex;align-items:center;gap:5px;}
+  .loading{padding:64px 20px;text-align:center;color:var(--muted);}
+  .loading code{background:var(--surface2);padding:2px 7px;border-radius:5px;border:1px solid var(--line);}
+  canvas{max-height:260px;}
+  .empty-good{display:flex;flex-direction:column;align-items:center;gap:10px;
+    padding:36px;color:var(--pos);}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand-logo">
+    <div class="mark">
+      <svg class="icon-lg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <div>
+      <h1>Shopee Comment AI</h1>
+      <div class="meta" id="meta">กำลังโหลด…</div>
+    </div>
+  </div>
+  <div class="controls">
+    <select id="brandFilter"><option value="__all__">ทุกแบรนด์</option></select>
+    <button id="refreshBtn">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      ดึง+วิเคราะห์ใหม่
+    </button>
+  </div>
+</header>
+
+<div class="wrap" id="app">
+  <div class="loading">กำลังโหลดข้อมูล… ถ้ายังไม่มีข้อมูล ให้รัน <code>python seed_demo.py</code> หรือกดปุ่ม "ดึง+วิเคราะห์ใหม่"</div>
+</div>
+
+<script>
+const API = "";
+let SUMMARY=null, TREND=[], currentBrand="__all__";
+
+// ---------- ไอคอน SVG ----------
+const IC = {
+  compass:'<path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+  chat:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  scale:'<path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6a4 4 0 0 0 6 0z"/><path d="M19 7l3 6a4 4 0 0 1-6 0z"/>',
+  alert:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  trend:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  pie:'<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+  bars:'<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+  wrench:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.3L3 18v3h3l6.4-6.3a4 4 0 0 0 5.3-5.4l-2.9 2.9-2.1-2.1z"/>',
+  star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  arrow:'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  check:'<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  box:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+};
+const svg=(p,cls='icon')=>`<svg class="${cls}" viewBox="0 0 24 24">${p}</svg>`;
+
+const fmtScore=s=>(s>0?"+":"")+s;
+function dirColor(s){return s>=15?"var(--pos)":s>-15?"var(--neu)":"var(--neg)";}
+function dirBg(s){return s>=15?"var(--pos-bg)":s>-15?"var(--neu-bg)":"var(--neg-bg)";}
+function sevColors(s){
+  if(s>=8)return["#fdecec","#b91c1c"]; if(s>=6)return["#fef0e7","#c2410c"];
+  if(s>=4)return["#fdf3e3","#b45309"]; return["#eef0f3","#475569"];
+}
+
+async function load(){
+  try{
+    const [s,t]=await Promise.all([
+      fetch(API+"/api/summary").then(r=>r.ok?r.json():null),
+      fetch(API+"/api/trend").then(r=>r.ok?r.json():[])
+    ]);
+    SUMMARY=s; TREND=t||[];
+    if(!SUMMARY){document.getElementById("app").innerHTML=
+      '<div class="loading">ยังไม่มีข้อมูล — รัน <code>python seed_demo.py</code> เพื่อทดสอบ หรือเชื่อม BigQuery แล้วกด "ดึง+วิเคราะห์ใหม่"</div>';return;}
+    fillBrandFilter(); render();
+  }catch(e){
+    document.getElementById("app").innerHTML='<div class="loading">โหลดข้อมูลไม่ได้: '+e+'</div>';
+  }
+}
+
+function fillBrandFilter(){
+  const sel=document.getElementById("brandFilter");
+  sel.innerHTML='<option value="__all__">ทุกแบรนด์</option>';
+  SUMMARY.brands.forEach(b=>{
+    const o=document.createElement("option");o.value=b.brand;o.textContent=b.brand;sel.appendChild(o);
+  });
+  sel.value=currentBrand;
+}
+
+function currentView(){
+  if(currentBrand==="__all__"){
+    return {sentiment:SUMMARY.overall.sentiment,score:SUMMARY.overall.sentiment_score,
+      direction:SUMMARY.overall.direction,cats:SUMMARY.overall.top_categories,
+      total:SUMMARY.total_comments,urgentTotal:SUMMARY.urgent_total};
+  }
+  const b=SUMMARY.brands.find(x=>x.brand===currentBrand)||{};
+  return {sentiment:b.sentiment||{},score:b.sentiment_score||0,direction:b.direction||"-",
+    cats:(b.top_issues||[]).map(i=>({category:i.category,count:i.count})),
+    total:b.count||0,urgentTotal:b.urgent_count||0};
+}
+
+function render(){
+  const v=currentView();
+  const urgent=SUMMARY.urgent.filter(u=>currentBrand==="__all__"||(u.brand||"ไม่ระบุแบรนด์")===currentBrand);
+  document.getElementById("meta").textContent=
+    "อัปเดตล่าสุด "+(SUMMARY.generated_at||"-")+"  •  รวม "+SUMMARY.total_comments+" คอมเมนต์";
+
+  document.getElementById("app").innerHTML=`
+    <div class="grid kpis">
+      <div class="card kpi">
+        <div class="kpi-head"><h3>ทิศทางคอมเมนต์</h3>
+          <div class="kpi-ic" style="background:${dirBg(v.score)};color:${dirColor(v.score)}">${svg(IC.compass)}</div></div>
+        <div class="big" style="color:${dirColor(v.score)}">${v.direction}</div>
+        <div class="sub">คะแนนทิศทาง <b style="color:${dirColor(v.score)}">${fmtScore(v.score)}</b> (สเกล -100 ถึง 100)</div>
+      </div>
+      <div class="card kpi">
+        <div class="kpi-head"><h3>คอมเมนต์ทั้งหมด</h3>
+          <div class="kpi-ic" style="background:var(--surface2);color:var(--muted)">${svg(IC.chat)}</div></div>
+        <div class="big">${v.total}</div><div class="sub">ในรอบล่าสุด</div>
+      </div>
+      <div class="card kpi">
+        <div class="kpi-head"><h3>เชิงบวก / เชิงลบ</h3>
+          <div class="kpi-ic" style="background:var(--surface2);color:var(--muted)">${svg(IC.scale)}</div></div>
+        <div class="big"><span style="color:var(--pos)">${v.sentiment.positive||0}</span>
+          <span class="muted" style="font-weight:500">/</span>
+          <span style="color:var(--neg)">${v.sentiment.negative||0}</span></div>
+        <div class="sub">กลาง ${v.sentiment.neutral||0}</div>
+      </div>
+      <div class="card kpi" style="${v.urgentTotal>0?'border-color:#f3bcbc':''}">
+        <div class="kpi-head"><h3>ต้องรีบเทคแอ็คชั่น</h3>
+          <div class="kpi-ic" style="background:${v.urgentTotal>0?'var(--neg-bg)':'var(--pos-bg)'};color:${v.urgentTotal>0?'var(--neg)':'var(--pos)'}">${svg(IC.alert)}</div></div>
+        <div class="big" style="color:${v.urgentTotal>0?'var(--neg)':'var(--pos)'}">${v.urgentTotal}</div>
+        <div class="sub">คอมเมนต์ด่วน</div>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="card"><h3>${svg(IC.trend,'icon icon-sm')} แนวโน้มคะแนนทิศทาง (รายวัน)</h3><canvas id="trendChart"></canvas></div>
+      <div class="card"><h3>${svg(IC.pie,'icon icon-sm')} สัดส่วนความรู้สึก</h3><canvas id="sentChart"></canvas></div>
+    </div>
+
+    <div class="section-title">${svg(IC.bars,'icon')} เปรียบเทียบรายแบรนด์ <span class="muted" style="font-weight:500;font-size:13px">(เรียงจากแย่สุด → ดีสุด)</span></div>
+    <div class="card" id="brandList"></div>
+
+    <div class="section-title">${svg(IC.wrench,'icon')} สิ่งที่ต้องแก้ / ปรับปรุง</div>
+    <div class="card" id="issues"></div>
+
+    <div class="section-title" style="color:var(--neg)">${svg(IC.alert,'icon')} <span style="color:var(--neg)">คอมเมนต์ที่ต้องรีบช่วยเหลือ</span> <span class="muted" style="font-weight:500;font-size:13px">(เรียงตามความรุนแรง)</span></div>
+    <div class="card" style="overflow-x:auto">${urgent.length===0?
+      `<div class="empty-good">${svg(IC.check,'icon icon-lg')}<div>ไม่มีคอมเมนต์ด่วนในรอบนี้</div></div>`:
+      `<table id="urgentTable"><thead><tr><th>รุนแรง</th><th>แบรนด์</th><th>ดาว</th><th>คอมเมนต์ / สิ่งที่ควรทำ</th><th>หมวด</th></tr></thead><tbody></tbody></table>`}
+    </div>`;
+
+  renderBrandList();
+  renderIssues(v);
+  if(urgent.length)renderUrgent(urgent);
+  drawSentChart(v.sentiment);
+  drawTrendChart();
+}
+
+function renderBrandList(){
+  document.getElementById("brandList").innerHTML=SUMMARY.brands.map(b=>{
+    const s=b.sentiment,tot=Math.max(1,(s.positive||0)+(s.neutral||0)+(s.negative||0));
+    const pw=(s.positive||0)/tot*100,nw=(s.neutral||0)/tot*100,gw=(s.negative||0)/tot*100;
+    return `<div class="brand-row">
+      <div class="brand-name"><b>${b.brand}</b>
+        <div class="sub">${b.count} คอมเมนต์ ${svg(IC.star,'icon icon-sm')} ${b.avg_rating??'-'}</div></div>
+      <div class="bar" title="บวก / กลาง / ลบ">
+        <i style="width:${pw}%;background:var(--pos)"></i><i style="width:${nw}%;background:var(--neu)"></i><i style="width:${gw}%;background:var(--neg)"></i></div>
+      <div class="brand-end">
+        <span class="pill" style="background:${dirBg(b.sentiment_score)};color:${dirColor(b.sentiment_score)}">${b.direction}</span>
+        <div class="muted" style="font-size:12px;margin-top:4px">${fmtScore(b.sentiment_score)} • ด่วน ${b.urgent_count}</div></div>
+    </div>`;
+  }).join("");
+}
+
+function renderIssues(v){
+  const el=document.getElementById("issues");
+  if(!v.cats||v.cats.length===0){el.innerHTML='<div class="muted">ไม่มีประเด็นปัญหาที่เด่นชัด</div>';return;}
+  el.innerHTML='<div>'+v.cats.map(c=>`<span class="chip">${svg(IC.box,'icon icon-sm')} ${c.category} <b>${c.count}</b></span>`).join("")+
+    '</div><div class="muted" style="font-size:13px;margin-top:12px">ตัวเลขคือจำนวนคอมเมนต์เชิงลบในแต่ละหมวด — โฟกัสหมวดที่ตัวเลขสูงก่อน</div>';
+}
+
+function renderUrgent(urgent){
+  const tb=document.querySelector("#urgentTable tbody");if(!tb)return;
+  tb.innerHTML=urgent.slice(0,50).map(u=>{
+    const[bg,fg]=sevColors(u.severity);
+    return `<tr>
+      <td><span class="sev" style="background:${bg};color:${fg}">${u.severity}</span></td>
+      <td>${u.brand||'-'}<div class="muted" style="font-size:11.5px">${u.product_name||''}</div></td>
+      <td style="white-space:nowrap">${u.rating??'-'} <span style="color:var(--neu)">${svg(IC.star,'icon icon-sm').replace('class="icon icon-sm"','class="icon icon-sm" style="display:inline;fill:var(--neu);stroke:var(--neu)"')}</span></td>
+      <td style="max-width:480px"><div class="urgent-text">"${(u.comment_text||'').slice(0,180)}"</div>
+        ${u.suggested_action?`<div class="action">${svg(IC.arrow,'icon icon-sm')} ${u.suggested_action}</div>`:''}</td>
+      <td><span class="chip">${u.category||'-'}</span></td></tr>`;
+  }).join("");
+}
+
+let sentChartObj=null,trendChartObj=null;
+function drawSentChart(s){
+  const ctx=document.getElementById("sentChart");if(sentChartObj)sentChartObj.destroy();
+  sentChartObj=new Chart(ctx,{type:"doughnut",
+    data:{labels:["เชิงบวก","กลาง","เชิงลบ"],datasets:[{data:[s.positive||0,s.neutral||0,s.negative||0],
+      backgroundColor:["#16a34a","#d97706","#dc2626"],borderColor:"#fff",borderWidth:3}]},
+    options:{cutout:"62%",plugins:{legend:{position:"bottom",labels:{color:"#1c2330",padding:14,usePointStyle:true,pointStyle:"circle"}}}}});
+}
+function drawTrendChart(){
+  const ctx=document.getElementById("trendChart");if(trendChartObj)trendChartObj.destroy();
+  const labels=TREND.map(t=>t.date.slice(5));
+  const data=TREND.map(t=>currentBrand==="__all__"?t.overall_score:(t.brands?.[currentBrand]??null));
+  const g=ctx.getContext("2d").createLinearGradient(0,0,0,260);
+  g.addColorStop(0,"rgba(238,77,45,.18)");g.addColorStop(1,"rgba(238,77,45,0)");
+  trendChartObj=new Chart(ctx,{type:"line",
+    data:{labels,datasets:[{label:"คะแนนทิศทาง",data,borderColor:"#ee4d2d",backgroundColor:g,
+      fill:true,tension:.35,pointRadius:2,pointBackgroundColor:"#ee4d2d",borderWidth:2}]},
+    options:{scales:{y:{min:-100,max:100,ticks:{color:"#9aa1ad"},grid:{color:"#eef0f3"}},
+      x:{ticks:{color:"#9aa1ad"},grid:{display:false}}},plugins:{legend:{display:false}}}});
+}
+
+document.getElementById("brandFilter").addEventListener("change",e=>{currentBrand=e.target.value;render();});
+document.getElementById("refreshBtn").addEventListener("click",async e=>{
+  const btn=e.currentTarget;btn.disabled=true;btn.innerHTML='กำลังประมวลผล…';
+  try{await fetch(API+"/api/refresh",{method:"POST"});await load();}
+  catch(err){alert("รีเฟรชไม่สำเร็จ: "+err);}
+  btn.disabled=false;
+  btn.innerHTML='<svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> ดึง+วิเคราะห์ใหม่';
+});
+
+load();
+</script>
+</body>
+</html>

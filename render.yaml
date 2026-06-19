@@ -1,0 +1,49 @@
+# ============================================================
+#  Render Blueprint — Shopee Comment AI
+#  วิธีใช้: push โปรเจกต์ขึ้น GitHub → Render Dashboard > New > Blueprint > เลือก repo
+#  หมายเหตุ: ค่า sync:false และ "Secret File" ต้องไปกรอกใน Dashboard เอง (กรอกในไฟล์นี้ไม่ได้)
+# ============================================================
+
+envVarGroups:
+  - name: shopee-shared
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY # เว้นว่างได้ = ใช้ rule-based
+        sync: false
+      - key: WINDOW_DAYS
+        value: "30"
+      # GOOGLE_APPLICATION_CREDENTIALS ชี้ไปที่ Secret File (เพิ่มไฟล์ service-account.json ใน Dashboard)
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/service-account.json
+
+services:
+  # ---------- เว็บแอป (Next.js) ----------
+  - type: web
+    name: shopee-comment-ai
+    runtime: node
+    plan: starter # free ก็ได้แต่จะ sleep; starter ไม่ sleep
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - fromGroup: shopee-shared
+      - key: NODE_VERSION
+        value: "20"
+      - key: PIPELINE_SECRET
+        generateValue: true # สุ่มให้อัตโนมัติ ใช้ป้องกัน /api/pipeline
+
+  # ---------- Cron ดึง+วิเคราะห์รายวัน (incremental) ----------
+  - type: cron
+    name: shopee-pipeline-daily
+    runtime: node
+    schedule: "0 0 * * *" # 00:00 UTC = 07:00 น. เวลาไทย
+    buildCommand: npm install
+    startCommand: npm run pipeline
+    envVars:
+      - fromGroup: shopee-shared
+      - key: NODE_VERSION
+        value: "20"
