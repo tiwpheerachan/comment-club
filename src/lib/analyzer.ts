@@ -18,8 +18,15 @@ const NEGATIVE_WORDS = [
 function ruleSentiment(text: string, rating: number | null): Sentiment {
   const t = (text || "").toLowerCase();
   let score = 0;
-  for (const w of POSITIVE_WORDS) if (t.includes(w)) score += 1;
-  for (const w of NEGATIVE_WORDS) if (t.includes(w)) score -= 1;
+  // จัดการการปฏิเสธ: "ไม่<คำบวก>" = ลบ, "ไม่<คำลบ>" = บวก (เช่น "ไม่แพง" = ดี)
+  for (const w of POSITIVE_WORDS) {
+    if (t.includes("ไม่" + w)) score -= 1;
+    else if (t.includes(w)) score += 1;
+  }
+  for (const w of NEGATIVE_WORDS) {
+    if (t.includes("ไม่" + w)) score += 1;
+    else if (t.includes(w)) score -= 1;
+  }
   if (rating != null && Number.isFinite(rating)) {
     if (rating >= 4) score += 1;
     else if (rating <= 2) score -= 2;
@@ -183,11 +190,11 @@ function merge(base: RawComment, a: AiResult | Analysis, by: "ai" | "rule"): Ana
   }
   if (severity >= URGENT_RULES.severity_threshold) urgent = true;
 
-  // ปลดธงด่วน false positive: รีวิวเชิงบวกที่ให้ดาวสูง (>=4) แทบไม่มีทางเป็นเคสฉุกเฉิน
-  // ภาษาไทยไม่มีเว้นวรรค การจับคำแบบ substring จึงชนพลาดบ่อย เช่น "ภูมิแพ้หายไปเลย"(ชน "แพ้"),
-  // "แพ้คดี", "ของปลอมในตลาด...แต่ของร้านนี้แท้" → เชื่อ sentiment+rating มากกว่า keyword
-  const highPositive = sentiment === "positive" && (rating == null || !Number.isFinite(rating) || (rating as number) >= 4);
-  if (urgent && highPositive) {
+  // ปลดธงด่วน false positive: รีวิวที่ให้ดาวสูง (>=4) แทบไม่มีทางเป็นเคสฉุกเฉิน
+  // ภาษาไทยไม่มีเว้นวรรค การจับคำแบบ substring ชนพลาดบ่อย เช่น "ภูมิแพ้หายไป"(ชน "แพ้"), "ไม่แพง"(ชน "แพง")
+  // → เชื่อดาว/sentiment มากกว่า keyword
+  const ratingNum = rating != null && Number.isFinite(rating) ? Number(rating) : null;
+  if (urgent && ((ratingNum != null && ratingNum >= 4) || (ratingNum == null && sentiment === "positive"))) {
     urgent = false;
     severity = Math.min(severity, 4);
   }

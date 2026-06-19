@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Alert, Bars, Box, Compass, Gear, Search, Trend, Users } from "./icons";
+import AdminProfile from "./AdminProfile";
 import Logo from "./Logo";
 
 const NAV = [
@@ -43,9 +44,8 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-4 text-[11px] text-muted border-t border-line">
-        ข้อมูลจาก BigQuery → Supabase
-      </div>
+      <AdminProfile />
+      <div className="px-4 pb-3 text-[10.5px] text-muted">ข้อมูลจาก BigQuery → Supabase</div>
     </aside>
   );
 }

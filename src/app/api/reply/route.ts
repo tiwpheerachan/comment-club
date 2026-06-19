@@ -44,8 +44,10 @@ export async function POST(req: NextRequest) {
     );
     if (error) throw new Error(error.message);
 
-    // เก็บข้อความตอบไว้ที่คอมเมนต์ด้วย + ทำเครื่องหมายกำลังจัดการ
-    await sb.from("comments").update({ note: reply_text, status: "in_progress" }).eq("comment_id", String(comment_id));
+    // เก็บข้อความตอบ + ชื่อผู้ตอบ ไว้ที่คอมเมนต์ + ทำเครื่องหมายกำลังจัดการ
+    const patch: Record<string, unknown> = { note: reply_text, status: "in_progress" };
+    if (replied_by) patch.assignee = replied_by;
+    await sb.from("comments").update(patch).eq("comment_id", String(comment_id));
 
     return NextResponse.json({
       ok: true,
