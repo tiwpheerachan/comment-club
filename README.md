@@ -159,3 +159,4 @@ git push -u origin main
 | `GET /api/export` | ส่งออกคอมเมนต์ที่กรองเป็น CSV |
 | `POST/GET /api/pipeline` | สั่งดึง+วิเคราะห์ใหม่ (ต้องมี secret ถ้าตั้งไว้) |
 ```
+# comment-club
