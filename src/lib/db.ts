@@ -232,6 +232,56 @@ export async function getRuns(limit = 20) {
   return data ?? [];
 }
 
+export interface RetentionSummary { scope: string; customers: number; repeat_customers: number; one_time: number; total_orders: number; repeat_rate: number; avg_orders: number }
+export interface RfmSegment { segment: string; customers: number; avg_recency: number; avg_frequency: number; avg_monetary: number; total_spend: number }
+export interface RetentionBundle {
+  summary: RetentionSummary[];
+  monthly: { month: string; new_customers: number; returning_customers: number; orders: number }[];
+  distribution: { bucket: string; customers: number }[];
+  topCustomers: { buyer: string; orders: number; spend: number; first_order: string | null; last_order: string | null; brands: string }[];
+  cohort: { cohort: string; months_since: number; customers: number }[];
+  rfm: RfmSegment[];
+  atRisk: { buyer: string; orders: number; spend: number; last_order: string | null; days_since: number; brands: string }[];
+  gap: { bucket: string; n: number }[];
+  brandmix: { bucket: string; customers: number }[];
+  review: { grp: string; customers: number; repeat_rate: number }[];
+  kpi: Record<string, number>;
+}
+
+export async function getRetention(): Promise<RetentionBundle> {
+  const sb = getServiceClient();
+  const empty: RetentionBundle = { summary: [], monthly: [], distribution: [], topCustomers: [], cohort: [], rfm: [], atRisk: [], gap: [], brandmix: [], review: [], kpi: {} };
+  if (!sb) return empty;
+  const [s, m, d, t, co, rf, ar, kp, gp, bm, rv] = await Promise.all([
+    sb.from("retention_summary").select("*"),
+    sb.from("retention_monthly").select("*").order("month", { ascending: true }),
+    sb.from("retention_distribution").select("*").order("bucket", { ascending: true }),
+    sb.from("top_customers").select("*").order("orders", { ascending: false }).limit(100),
+    sb.from("retention_cohort").select("*").order("cohort", { ascending: true }).limit(1000),
+    sb.from("rfm_segments").select("*"),
+    sb.from("at_risk_customers").select("*").order("spend", { ascending: false }).limit(100),
+    sb.from("retention_kpi").select("*"),
+    sb.from("retention_gap").select("*"),
+    sb.from("retention_brandmix").select("*"),
+    sb.from("retention_review").select("*"),
+  ]);
+  const kpi: Record<string, number> = {};
+  for (const row of (kp.data as { key: string; value: number }[]) ?? []) kpi[row.key] = Number(row.value);
+  return {
+    summary: (s.data as RetentionSummary[]) ?? [],
+    monthly: (m.data as RetentionBundle["monthly"]) ?? [],
+    distribution: (d.data as RetentionBundle["distribution"]) ?? [],
+    topCustomers: (t.data as RetentionBundle["topCustomers"]) ?? [],
+    cohort: (co.data as RetentionBundle["cohort"]) ?? [],
+    rfm: (rf.data as RfmSegment[]) ?? [],
+    atRisk: (ar.data as RetentionBundle["atRisk"]) ?? [],
+    gap: (gp.data as RetentionBundle["gap"]) ?? [],
+    brandmix: (bm.data as RetentionBundle["brandmix"]) ?? [],
+    review: (rv.data as RetentionBundle["review"]) ?? [],
+    kpi,
+  };
+}
+
 /** ค่าที่ไม่ซ้ำสำหรับเติม dropdown ฟิลเตอร์ (brand/category) */
 export async function getDistinct(): Promise<{ brands: string[]; categories: string[] }> {
   const sb = getServiceClient();

@@ -10,6 +10,7 @@
     "lint": "next lint",
     "pipeline": "tsx scripts/pipeline.ts",
     "introspect": "tsx scripts/introspect.ts",
+    "retention": "tsx scripts/retention.ts",
     "dryrun": "tsx scripts/dryrun.ts",
     "migrate": "tsx scripts/migrate.ts",
     "typecheck": "tsc --noEmit"

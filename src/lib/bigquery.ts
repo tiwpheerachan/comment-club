@@ -176,6 +176,197 @@ export async function fetchProducts(itemIds: string[]): Promise<ProductMeta[]> {
   }));
 }
 
+// ---------- Customer Retention (จาก shopee_orders / shopee_order_items) ----------
+
+export interface RetentionData {
+  summary: { scope: string; customers: number; repeat_customers: number; one_time: number; total_orders: number; repeat_rate: number; avg_orders: number }[];
+  monthly: { month: string; new_customers: number; returning_customers: number; orders: number }[];
+  distribution: { bucket: string; customers: number }[];
+  topCustomers: { buyer: string; orders: number; spend: number; first_order: string; last_order: string; brands: string }[];
+  cohort: { cohort: string; months_since: number; customers: number }[];
+  rfm: { segment: string; customers: number; avg_recency: number; avg_frequency: number; avg_monetary: number; total_spend: number }[];
+  atRisk: { buyer: string; orders: number; spend: number; last_order: string; days_since: number; brands: string }[];
+  gap: { bucket: string; n: number }[];
+  brandmix: { bucket: string; customers: number }[];
+  review: { grp: string; customers: number; repeat_rate: number }[];
+  kpi: Record<string, number>;
+}
+
+const RFM_CASE = `CASE
+  WHEN freq>=3 AND recency<=90 THEN 'แชมเปี้ยน'
+  WHEN freq>=2 AND recency<=180 THEN 'ลูกค้าประจำ'
+  WHEN freq=1 AND recency<=90 THEN 'ลูกค้าใหม่'
+  WHEN freq=1 AND recency<=180 THEN 'มีแวว'
+  WHEN freq>=3 AND recency>365 THEN 'ห้ามเสีย (เคย VIP)'
+  WHEN freq>=2 AND recency<=365 THEN 'กำลังจะหลุด'
+  WHEN recency<=365 THEN 'หลับใหล'
+  ELSE 'หลุดไปแล้ว'
+END`;
+
+export async function fetchRetention(): Promise<RetentionData> {
+  const ORDERS = `\`${BIGQUERY.projectId}.${BIGQUERY.dataset}.shopee_orders\``;
+  const ITEMS = `\`${BIGQUERY.projectId}.${BIGQUERY.dataset}.shopee_order_items\``;
+  const DONE = `order_status = 'COMPLETED' AND buyer_username IS NOT NULL AND buyer_username != ''`;
+  const c = client();
+  const run = async (query: string) => {
+    const [rows] = await c.query({ query, location: BIGQUERY.location });
+    return rows as Record<string, unknown>[];
+  };
+  const num = (v: unknown) => (v == null ? 0 : Number(v));
+
+  const TODAY = `(SELECT MAX(create_date) FROM ${ORDERS} WHERE ${DONE})`;
+  const COMMENTS = `\`${BIGQUERY.projectId}.${BIGQUERY.dataset}.shopee_product_comments\``;
+
+  const [summaryRows, monthlyRows, distRows, topRows, cohortRows, rfmRows, atRiskRows, kpiRows, gapRows, brandmixRows, reviewRows, paretoRows] = await Promise.all([
+    run(`
+      WITH ob AS (SELECT brand_id, buyer_username b, COUNT(*) o FROM ${ORDERS} WHERE ${DONE} GROUP BY 1,2),
+           oall AS (SELECT buyer_username b, COUNT(*) o FROM ${ORDERS} WHERE ${DONE} GROUP BY 1)
+      SELECT brand_id scope, COUNT(*) customers, COUNTIF(o>=2) repeat_customers, COUNTIF(o=1) one_time,
+             SUM(o) total_orders, ROUND(COUNTIF(o>=2)/COUNT(*)*100,1) repeat_rate, ROUND(AVG(o),2) avg_orders
+      FROM ob WHERE brand_id IS NOT NULL GROUP BY 1
+      UNION ALL
+      SELECT 'ALL', COUNT(*), COUNTIF(o>=2), COUNTIF(o=1), SUM(o),
+             ROUND(COUNTIF(o>=2)/COUNT(*)*100,1), ROUND(AVG(o),2) FROM oall`),
+    run(`
+      WITH ord AS (SELECT buyer_username b, create_date d FROM ${ORDERS} WHERE ${DONE}),
+           firsts AS (SELECT b, MIN(d) fd FROM ord GROUP BY 1),
+           m AS (SELECT DATE_TRUNC(o.d, MONTH) month, o.b, DATE_TRUNC(f.fd, MONTH)=DATE_TRUNC(o.d, MONTH) is_new
+                 FROM ord o JOIN firsts f USING(b))
+      SELECT CAST(month AS STRING) month,
+             COUNT(DISTINCT IF(is_new, b, NULL)) new_customers,
+             COUNT(DISTINCT IF(NOT is_new, b, NULL)) returning_customers,
+             COUNT(*) orders
+      FROM m GROUP BY 1 ORDER BY 1`),
+    run(`
+      WITH b AS (SELECT buyer_username, COUNT(*) o FROM ${ORDERS} WHERE ${DONE} GROUP BY 1)
+      SELECT CASE WHEN o>=5 THEN '5+' ELSE CAST(o AS STRING) END bucket, COUNT(*) customers
+      FROM b GROUP BY 1 ORDER BY 1`),
+    run(`
+      WITH s AS (
+        SELECT o.buyer_username b, COUNT(DISTINCT o.order_sn) orders, SUM(oi.price*oi.quantity) spend,
+               CAST(MIN(o.create_date) AS STRING) first_order, CAST(MAX(o.create_date) AS STRING) last_order,
+               STRING_AGG(DISTINCT o.brand_id, ', ') brands
+        FROM ${ORDERS} o JOIN ${ITEMS} oi USING(order_sn)
+        WHERE o.order_status='COMPLETED' AND o.buyer_username IS NOT NULL AND o.buyer_username!=''
+        GROUP BY 1)
+      SELECT * FROM s ORDER BY orders DESC, spend DESC LIMIT 100`),
+    // cohort retention
+    run(`
+      WITH ord AS (SELECT buyer_username b, create_date d FROM ${ORDERS} WHERE ${DONE}),
+           firsts AS (SELECT b, DATE_TRUNC(MIN(d), MONTH) cohort FROM ord GROUP BY 1),
+           act AS (SELECT f.cohort, DATE_DIFF(DATE_TRUNC(o.d, MONTH), f.cohort, MONTH) mi, o.b
+                   FROM ord o JOIN firsts f USING(b))
+      SELECT CAST(cohort AS STRING) cohort, mi months_since, COUNT(DISTINCT b) customers
+      FROM act
+      WHERE cohort >= DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 17 MONTH), MONTH) AND mi BETWEEN 0 AND 12
+      GROUP BY 1,2 ORDER BY 1,2`),
+    // RFM segments
+    run(`
+      WITH buyer AS (
+        SELECT o.buyer_username b, COUNT(DISTINCT o.order_sn) freq,
+               DATE_DIFF(${TODAY}, MAX(o.create_date), DAY) recency,
+               SUM(oi.price*oi.quantity) monetary
+        FROM ${ORDERS} o JOIN ${ITEMS} oi USING(order_sn)
+        WHERE o.order_status='COMPLETED' AND o.buyer_username IS NOT NULL AND o.buyer_username!='' GROUP BY 1),
+      seg AS (SELECT *, ${RFM_CASE} segment FROM buyer)
+      SELECT segment, COUNT(*) customers, ROUND(AVG(recency)) avg_recency, ROUND(AVG(freq),2) avg_frequency,
+             ROUND(AVG(monetary)) avg_monetary, ROUND(SUM(monetary)) total_spend
+      FROM seg GROUP BY 1`),
+    // win-back / at-risk (repeat customers gone quiet)
+    run(`
+      SELECT o.buyer_username b, COUNT(DISTINCT o.order_sn) orders, ROUND(SUM(oi.price*oi.quantity)) spend,
+             CAST(MAX(o.create_date) AS STRING) last_order,
+             DATE_DIFF(${TODAY}, MAX(o.create_date), DAY) days_since,
+             STRING_AGG(DISTINCT o.brand_id, ', ') brands
+      FROM ${ORDERS} o JOIN ${ITEMS} oi USING(order_sn)
+      WHERE o.order_status='COMPLETED' AND o.buyer_username IS NOT NULL AND o.buyer_username!=''
+      GROUP BY 1
+      HAVING orders>=2 AND days_since BETWEEN 120 AND 540
+      ORDER BY spend DESC LIMIT 100`),
+    // kpi: time-to-2nd-order + returning revenue %
+    run(`
+      WITH ord AS (SELECT buyer_username b, create_date d FROM ${ORDERS} WHERE ${DONE}),
+           ranked AS (SELECT b, d, ROW_NUMBER() OVER (PARTITION BY b ORDER BY d) rn FROM ord),
+           second AS (SELECT a.b, DATE_DIFF(s.d, a.d, DAY) gap FROM ranked a JOIN ranked s ON a.b=s.b AND a.rn=1 AND s.rn=2),
+           buyer AS (SELECT o.buyer_username b, COUNT(DISTINCT o.order_sn) freq, SUM(oi.price*oi.quantity) spend
+                     FROM ${ORDERS} o JOIN ${ITEMS} oi USING(order_sn)
+                     WHERE o.order_status='COMPLETED' AND o.buyer_username IS NOT NULL AND o.buyer_username!='' GROUP BY 1)
+      SELECT
+        (SELECT APPROX_QUANTILES(gap,100)[OFFSET(50)] FROM second) median_days_to_2nd,
+        (SELECT ROUND(AVG(gap)) FROM second) avg_days_to_2nd,
+        (SELECT COUNT(*) FROM second) repeat2,
+        (SELECT ROUND(SUM(IF(freq>=2,spend,0))/NULLIF(SUM(spend),0)*100,1) FROM buyer) returning_rev_pct,
+        (SELECT ROUND(SUM(spend)) FROM buyer) total_revenue`),
+    // gap histogram: ลูกค้ากลับมาซื้อภายในกี่วัน
+    run(`
+      WITH ord AS (SELECT buyer_username b, create_date d FROM ${ORDERS} WHERE ${DONE}),
+           ranked AS (SELECT b, d, ROW_NUMBER() OVER (PARTITION BY b ORDER BY d) rn FROM ord),
+           gaps AS (SELECT DATE_DIFF(s.d, a.d, DAY) g FROM ranked a JOIN ranked s ON a.b=s.b AND s.rn=a.rn+1)
+      SELECT CASE WHEN g<=30 THEN '0-30' WHEN g<=60 THEN '31-60' WHEN g<=90 THEN '61-90'
+                  WHEN g<=180 THEN '91-180' WHEN g<=365 THEN '181-365' ELSE '365+' END bucket, COUNT(*) n
+      FROM gaps GROUP BY 1`),
+    // brand stickiness: ลูกค้าซื้อกี่แบรนด์
+    run(`
+      WITH b AS (SELECT buyer_username, COUNT(DISTINCT brand_id) nb FROM ${ORDERS} WHERE ${DONE} AND brand_id IS NOT NULL GROUP BY 1)
+      SELECT CASE WHEN nb<=1 THEN '1 แบรนด์' WHEN nb=2 THEN '2 แบรนด์' ELSE '3+ แบรนด์' END bucket, COUNT(*) customers
+      FROM b GROUP BY 1`),
+    // review × retention: ลูกค้าที่เคยรีวิวแย่ ซื้อซ้ำน้อยกว่าไหม
+    run(`
+      WITH ord AS (SELECT buyer_username b, COUNT(DISTINCT order_sn) freq FROM ${ORDERS} WHERE ${DONE} GROUP BY 1),
+           cm AS (SELECT buyer_username b, MIN(rating_star) worst FROM ${COMMENTS}
+                  WHERE comment IS NOT NULL AND comment!='' AND buyer_username IS NOT NULL AND buyer_username!='' GROUP BY 1)
+      SELECT CASE WHEN cm.b IS NULL THEN 'ไม่เคยรีวิว'
+                  WHEN cm.worst<=2 THEN 'เคยรีวิวแย่ (≤2★)'
+                  WHEN cm.worst=3 THEN 'รีวิวกลาง (3★)' ELSE 'รีวิวดี (≥4★)' END grp,
+             COUNT(*) customers, ROUND(COUNTIF(ord.freq>=2)/COUNT(*)*100,1) repeat_rate
+      FROM ord LEFT JOIN cm USING(b) GROUP BY 1`),
+    // revenue Pareto concentration
+    run(`
+      WITH buyer AS (SELECT o.buyer_username b, SUM(oi.price*oi.quantity) spend
+                     FROM ${ORDERS} o JOIN ${ITEMS} oi USING(order_sn)
+                     WHERE o.order_status='COMPLETED' AND o.buyer_username IS NOT NULL AND o.buyer_username!='' GROUP BY 1),
+           ranked AS (SELECT spend, PERCENT_RANK() OVER (ORDER BY spend DESC) pr FROM buyer),
+           tot AS (SELECT SUM(spend) t FROM buyer)
+      SELECT ROUND(SUM(IF(pr<0.01,spend,0))/(SELECT t FROM tot)*100,1) top1,
+             ROUND(SUM(IF(pr<0.05,spend,0))/(SELECT t FROM tot)*100,1) top5,
+             ROUND(SUM(IF(pr<0.10,spend,0))/(SELECT t FROM tot)*100,1) top10,
+             ROUND(SUM(IF(pr<0.20,spend,0))/(SELECT t FROM tot)*100,1) top20 FROM ranked`),
+  ]);
+
+  return {
+    summary: summaryRows.map((r) => ({
+      scope: String(r.scope), customers: num(r.customers), repeat_customers: num(r.repeat_customers),
+      one_time: num(r.one_time), total_orders: num(r.total_orders), repeat_rate: num(r.repeat_rate), avg_orders: num(r.avg_orders),
+    })),
+    monthly: monthlyRows.map((r) => ({
+      month: String(r.month), new_customers: num(r.new_customers), returning_customers: num(r.returning_customers), orders: num(r.orders),
+    })),
+    distribution: distRows.map((r) => ({ bucket: String(r.bucket), customers: num(r.customers) })),
+    topCustomers: topRows.map((r) => ({
+      buyer: String(r.b), orders: num(r.orders), spend: Math.round(num(r.spend)),
+      first_order: r.first_order ? String(r.first_order) : "", last_order: r.last_order ? String(r.last_order) : "",
+      brands: r.brands ? String(r.brands) : "",
+    })),
+    cohort: cohortRows.map((r) => ({ cohort: String(r.cohort), months_since: num(r.months_since), customers: num(r.customers) })),
+    rfm: rfmRows.map((r) => ({
+      segment: String(r.segment), customers: num(r.customers), avg_recency: num(r.avg_recency),
+      avg_frequency: num(r.avg_frequency), avg_monetary: num(r.avg_monetary), total_spend: num(r.total_spend),
+    })),
+    atRisk: atRiskRows.map((r) => ({
+      buyer: String(r.b), orders: num(r.orders), spend: Math.round(num(r.spend)),
+      last_order: r.last_order ? String(r.last_order) : "", days_since: num(r.days_since), brands: r.brands ? String(r.brands) : "",
+    })),
+    gap: gapRows.map((r) => ({ bucket: String(r.bucket), n: num(r.n) })),
+    brandmix: brandmixRows.map((r) => ({ bucket: String(r.bucket), customers: num(r.customers) })),
+    review: reviewRows.map((r) => ({ grp: String(r.grp), customers: num(r.customers), repeat_rate: num(r.repeat_rate) })),
+    kpi: {
+      median_days_to_2nd: num(kpiRows[0]?.median_days_to_2nd), avg_days_to_2nd: num(kpiRows[0]?.avg_days_to_2nd),
+      repeat2: num(kpiRows[0]?.repeat2), returning_rev_pct: num(kpiRows[0]?.returning_rev_pct), total_revenue: num(kpiRows[0]?.total_revenue),
+      pareto_top1: num(paretoRows[0]?.top1), pareto_top5: num(paretoRows[0]?.top5), pareto_top10: num(paretoRows[0]?.top10), pareto_top20: num(paretoRows[0]?.top20),
+    },
+  };
+}
+
 /** ทดสอบการเชื่อมต่อ */
 export async function healthcheck(): Promise<boolean> {
   await client().query({ query: "SELECT 1 AS ok", location: BIGQUERY.location });

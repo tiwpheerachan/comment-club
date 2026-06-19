@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Alert, Bars, Box, Chat, Compass, Gear, Search, Trend } from "./icons";
+import { Alert, Bars, Box, Chat, Compass, Gear, Search, Trend, Users } from "./icons";
 
 const NAV = [
   { href: "/", label: "ภาพรวม", Icon: Compass },
@@ -9,6 +9,7 @@ const NAV = [
   { href: "/products", label: "รายสินค้า", Icon: Box },
   { href: "/explore", label: "สำรวจคอมเมนต์", Icon: Search },
   { href: "/triage", label: "ศูนย์จัดการด่วน", Icon: Alert },
+  { href: "/retention", label: "Retention ลูกค้า", Icon: Users },
   { href: "/trends", label: "เทรนด์ / รายงาน", Icon: Trend },
   { href: "/settings", label: "ตั้งค่า", Icon: Gear },
 ];

@@ -2,7 +2,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { aggregate } from "./aggregate";
 import { analyze } from "./analyzer";
-import { fetchNewComments, fetchProducts } from "./bigquery";
+import { fetchNewComments, fetchProducts, fetchRetention } from "./bigquery";
 import { PIPELINE } from "./config";
 import { getServiceClient } from "./supabase";
 import { clean } from "./text";
@@ -128,6 +128,52 @@ async function syncProducts(sb: SupabaseClient, productIds: string[]): Promise<n
   return rows.length;
 }
 
+/** สรุป Customer Retention จาก BigQuery → Supabase (retention เปลี่ยนช้า → รันสัปดาห์ละครั้งพอ คุมค่า BQ) */
+async function syncRetention(sb: SupabaseClient, force = false): Promise<void> {
+  if (!force) {
+    const { data: last } = await sb.from("retention_summary").select("updated_at").order("updated_at", { ascending: false }).limit(1).maybeSingle();
+    if (last?.updated_at) {
+      const ageDays = (Date.now() - new Date(last.updated_at as string).getTime()) / 86400000;
+      if (ageDays < 6) {
+        console.log(`[pipeline] ข้าม retention (อัปเดตล่าสุด ${ageDays.toFixed(1)} วันก่อน)`);
+        return;
+      }
+    }
+  }
+  const data = await fetchRetention();
+  const now = new Date().toISOString();
+  if (data.summary.length) await sb.from("retention_summary").upsert(data.summary.map((s) => ({ ...s, updated_at: now })), { onConflict: "scope" });
+  if (data.monthly.length) await sb.from("retention_monthly").upsert(data.monthly, { onConflict: "month" });
+  if (data.distribution.length) await sb.from("retention_distribution").upsert(data.distribution, { onConflict: "bucket" });
+  if (data.rfm.length) await sb.from("rfm_segments").upsert(data.rfm.map((r) => ({ ...r, updated_at: now })), { onConflict: "segment" });
+
+  // ตารางที่ต้องล้างก่อน (กันรายการเก่าค้าง)
+  await sb.from("top_customers").delete().gt("orders", -1);
+  if (data.topCustomers.length)
+    await sb.from("top_customers").insert(data.topCustomers.map((t) => ({ ...t, first_order: t.first_order || null, last_order: t.last_order || null, updated_at: now })));
+  await sb.from("at_risk_customers").delete().gt("orders", -1);
+  if (data.atRisk.length)
+    await sb.from("at_risk_customers").insert(data.atRisk.map((t) => ({ ...t, last_order: t.last_order || null, updated_at: now })));
+  await sb.from("retention_cohort").delete().neq("cohort", "___none___");
+  if (data.cohort.length) await sb.from("retention_cohort").insert(data.cohort);
+
+  if (data.gap.length) await sb.from("retention_gap").upsert(data.gap, { onConflict: "bucket" });
+  if (data.brandmix.length) await sb.from("retention_brandmix").upsert(data.brandmix, { onConflict: "bucket" });
+  if (data.review.length) await sb.from("retention_review").upsert(data.review, { onConflict: "grp" });
+  await sb.from("retention_kpi").upsert(
+    Object.entries(data.kpi).map(([key, value]) => ({ key, value, updated_at: now })),
+    { onConflict: "key" }
+  );
+  console.log(`[pipeline] sync retention: ${data.summary.length} scopes, ${data.rfm.length} segments, ${data.cohort.length} cohort cells, at-risk ${data.atRisk.length}`);
+}
+
+/** บังคับ sync retention เดี๋ยวนี้ (สำหรับ npm run retention) */
+export async function runRetentionSync(): Promise<void> {
+  const sb = getServiceClient();
+  if (!sb) throw new Error("ยังไม่ได้เชื่อม Supabase");
+  await syncRetention(sb, true);
+}
+
 export async function runPipeline(): Promise<RunResult> {
   const sb = getServiceClient();
   if (!sb) {
@@ -182,6 +228,13 @@ export async function runPipeline(): Promise<RunResult> {
 
     // 3.5) sync metadata สินค้า (ชื่อ/SKU/รูป/ราคา) จาก shopee_items สำหรับ item ทั้งหมดที่มีคอมเมนต์
     await syncProducts(sb, await allProductIds(sb));
+
+    // 3.6) sync Customer Retention (จาก shopee_orders)
+    try {
+      await syncRetention(sb);
+    } catch (e) {
+      console.error("[pipeline] sync retention ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+    }
 
     const summary = aggregate(windowComments, PIPELINE.windowDays);
 
