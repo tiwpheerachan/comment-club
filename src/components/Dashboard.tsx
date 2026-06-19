@@ -235,7 +235,7 @@ function IssueBars({ cats }: { cats: { category: string; count: number }[] }) {
       {cats.map((c) => (
         <div key={c.category} className="flex items-center gap-2.5 text-[13px]">
           <div className="w-[150px] flex-none flex items-center gap-1.5"><Box className="w-[14px] h-[14px] text-shopee" /> {c.category}</div>
-          <div className="flex-1 h-[12px] bg-[#f9fafb] rounded-md overflow-hidden"><div style={{ width: `${(c.count / max) * 100}%`, background: "#ef5b3b", height: "100%" }} /></div>
+          <div className="flex-1 h-[12px] bg-[#f9fafb] rounded-md overflow-hidden"><div style={{ width: `${(c.count / max) * 100}%`, background: "#5f9579", height: "100%" }} /></div>
           <div className="w-10 text-right font-semibold">{c.count}</div>
         </div>
       ))}

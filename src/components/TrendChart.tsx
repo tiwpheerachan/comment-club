@@ -33,8 +33,8 @@ export default function TrendChart({
           <AreaChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
             <defs>
               <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ee4d2d" stopOpacity={0.18} />
-                <stop offset="100%" stopColor="#ee4d2d" stopOpacity={0} />
+                <stop offset="0%" stopColor="#4e7d63" stopOpacity={0.18} />
+                <stop offset="100%" stopColor="#4e7d63" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="#eef0f3" vertical={false} />
@@ -52,11 +52,11 @@ export default function TrendChart({
             <Area
               type="monotone"
               dataKey="score"
-              stroke="#ee4d2d"
+              stroke="#4e7d63"
               strokeWidth={2}
               fill="url(#trendGrad)"
               connectNulls
-              dot={{ r: 2, fill: "#ee4d2d" }}
+              dot={{ r: 2, fill: "#4e7d63" }}
             />
           </AreaChart>
         </ResponsiveContainer>

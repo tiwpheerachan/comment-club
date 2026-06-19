@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Alert, Bars, Box, Chat, Compass, Gear, Search, Trend, Users } from "./icons";
+import { Alert, Bars, Box, Compass, Gear, Search, Trend, Users } from "./icons";
+import Logo from "./Logo";
 
 const NAV = [
   { href: "/", label: "ภาพรวม", Icon: Compass },
@@ -20,14 +21,9 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[230px] flex-none bg-white border-r border-line h-screen sticky top-0 flex flex-col">
-      <div className="flex items-center gap-2.5 px-5 h-[60px] border-b border-line">
-        <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-shopee to-shopee-light flex items-center justify-center text-white">
-          <Chat className="w-5 h-5" />
-        </div>
-        <div className="leading-tight">
-          <div className="text-[15px] font-bold tracking-tight">Shopee AI</div>
-          <div className="text-[11px] text-muted">Comment Intelligence</div>
-        </div>
+      <div className="flex flex-col justify-center px-5 h-[64px] border-b border-line">
+        <Logo scriptSize={28} clubSize={22} />
+        <div className="text-[10.5px] text-muted ml-[11px] mt-0.5 tracking-wide">Comment & Customer Intelligence</div>
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">

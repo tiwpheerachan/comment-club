@@ -1,5 +1,5 @@
 {
-  "name": "shopee-comment-ai",
+  "name": "commentclub",
   "version": "1.0.0",
   "private": true,
   "description": "Shopee Comment AI — ดึงคอมเมนต์จาก BigQuery พักที่ Supabase วิเคราะห์ด้วย Claude แสดงผลบน Next.js dashboard",

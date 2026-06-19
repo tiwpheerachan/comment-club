@@ -5,7 +5,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        shopee: { DEFAULT: "#ee4d2d", light: "#ff6b3d" },
+        // แบรนด์ commentclub — เขียว sage (ใช้ชื่อ token เดิม "shopee" เพื่อไม่ต้องแก้ทุกที่)
+        shopee: { DEFAULT: "#4e7d63", light: "#6fa085" },
+        cc: { DEFAULT: "#4e7d63", light: "#6fa085", dark: "#3c6650" },
         pos: { DEFAULT: "#16a34a", bg: "#e8f7ee" },
         neg: { DEFAULT: "#dc2626", bg: "#fdecec" },
         neu: { DEFAULT: "#d97706", bg: "#fdf3e3" },
@@ -15,6 +17,8 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-thai)", '"IBM Plex Sans Thai"', '"Segoe UI"', "system-ui", "sans-serif"],
+        script: ["var(--font-script)", "cursive"],
+        display: ["var(--font-display)", "var(--font-thai)", "sans-serif"],
       },
       boxShadow: {
         card: "0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06)",

@@ -11,7 +11,7 @@ type BrandDaily = { date: string; brand: string; total: number; urgent: number; 
 type CatDaily = { date: string; category: string; total: number };
 
 const RANGES = [30, 90, 180, 365];
-const LINE_COLORS = ["#ee4d2d", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+const LINE_COLORS = ["#4e7d63", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
 export default function TrendsClient({
   daily, brandDaily, categoryDaily, products,
@@ -219,7 +219,7 @@ export default function TrendsClient({
             <YAxis yAxisId="r" orientation="right" tick={{ fill: "#cbd2da", fontSize: 11 }} tickLine={false} axisLine={false} />
             <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e6e8ec", fontSize: 12 }} />
             <Bar yAxisId="r" dataKey="total" name="จำนวน" fill="#eef0f3" radius={[3, 3, 0, 0]} />
-            <Line yAxisId="l" type="monotone" dataKey="score" name="คะแนน" stroke="#ee4d2d" strokeWidth={2} dot={false} />
+            <Line yAxisId="l" type="monotone" dataKey="score" name="คะแนน" stroke="#4e7d63" strokeWidth={2} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </ChartCard>
