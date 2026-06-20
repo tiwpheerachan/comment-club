@@ -1,0 +1,30 @@
+name: Daily pipeline (incremental)
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # 00:00 UTC = 07:00 น. เวลาไทย
+  workflow_dispatch: {} # กดรันเองได้จากแท็บ Actions
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: write BigQuery key
+        run: printf '%s' "$GCP_SA_KEY" > service-account.json
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      - name: run pipeline (incremental)
+        run: npm run pipeline
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INITIAL_BACKFILL_DAYS: "3" # เผื่อกรณีตารางว่าง จะดึงแค่ 3 วัน (กันค่าพุ่ง)
+          WINDOW_DAYS: "30"
