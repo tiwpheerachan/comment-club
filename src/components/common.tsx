@@ -8,6 +8,9 @@ export function ScorePill({ score, label }: { score: number; label?: string }) {
   );
 }
 
+/** สีอารมณ์มาตรฐานทั้งระบบ */
+export const SENT_COLOR = { positive: "#16a34a", neutral: "#f59e0b", negative: "#ef4444" };
+
 export function SentimentBar({
   positive,
   neutral,
@@ -18,11 +21,33 @@ export function SentimentBar({
   negative: number;
 }) {
   const tot = Math.max(1, positive + neutral + negative);
+  const pct = (n: number) => Math.round((n / tot) * 100);
+  const seg = (n: number, color: string, label: string) =>
+    n > 0 ? (
+      <div
+        className="h-full"
+        style={{ width: `${(n / tot) * 100}%`, minWidth: 6, background: color }}
+        title={`${label} ${n.toLocaleString("th-TH")} (${pct(n)}%)`}
+      />
+    ) : null;
   return (
-    <div className="h-[9px] rounded-md bg-[#f9fafb] overflow-hidden flex min-w-[120px]" title="บวก / กลาง / ลบ">
-      <i style={{ width: `${(positive / tot) * 100}%`, background: "#16a34a" }} />
-      <i style={{ width: `${(neutral / tot) * 100}%`, background: "#d97706" }} />
-      <i style={{ width: `${(negative / tot) * 100}%`, background: "#dc2626" }} />
+    <div className="flex h-[12px] rounded-full overflow-hidden bg-slate-100 min-w-[120px] gap-[1.5px]">
+      {seg(positive, SENT_COLOR.positive, "บวก")}
+      {seg(neutral, SENT_COLOR.neutral, "กลาง")}
+      {seg(negative, SENT_COLOR.negative, "ลบ")}
+    </div>
+  );
+}
+
+/** legend สีอารมณ์ (วางไว้บนตาราง/การ์ด) */
+export function SentimentLegend() {
+  return (
+    <div className="flex items-center gap-3 text-[11.5px] text-muted">
+      {([["บวก", SENT_COLOR.positive], ["กลาง", SENT_COLOR.neutral], ["ลบ", SENT_COLOR.negative]] as const).map(([l, c]) => (
+        <span key={l} className="inline-flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ background: c }} /> {l}
+        </span>
+      ))}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
-import { NotReady, ScorePill, SentimentBar } from "@/components/common";
+import { NotReady, ScorePill, SentimentBar, SentimentLegend } from "@/components/common";
 import { Star } from "@/components/icons";
+import { directionLabel } from "@/lib/aggregate";
 import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getBrandStats } from "@/lib/db";
 import { hasSupabase } from "@/lib/supabase";
@@ -28,6 +29,7 @@ export default async function BrandsPage() {
     <>
       <PageHeader title="รายแบรนด์" subtitle={`${brands.length} แบรนด์ • เรียงจากแย่สุด → ดีสุด`} />
       <div className="p-7">
+        <div className="flex justify-end mb-2"><SentimentLegend /></div>
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -58,7 +60,7 @@ export default async function BrandsPage() {
                     </span>
                   </td>
                   <td className="p-3.5 text-right whitespace-nowrap">
-                    <ScorePill score={b.sentiment_score} /> <span className="text-muted text-xs ml-1">{fmtScore(b.sentiment_score)}</span>
+                    <ScorePill score={b.sentiment_score} label={`${directionLabel(b.sentiment_score)} ${fmtScore(b.sentiment_score)}`} />
                   </td>
                   <td className="p-3.5 text-right">
                     <Link href={`/explore?brand=${encodeURIComponent(b.brand)}`} className="text-shopee text-xs font-semibold hover:underline">

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Summary, TrendPoint, UrgentItem } from "@/lib/types";
 import { dirBg, dirColor, fmtScore, sevColors } from "@/lib/ui";
 import { Alert, ArrowRight, Bars, Box, Chat, Check, Compass, Pie, Refresh, Scale, Star, Trend, Wrench } from "./icons";
+import { SentimentBar } from "./common";
 import ImageThumbs from "./ImageThumbs";
 import PageHeader from "./PageHeader";
 import SentimentChart from "./SentimentChart";
@@ -118,13 +119,9 @@ export default function Dashboard({ summary, trend }: { summary: Summary; trend:
  <b className="text-[14.5px]">{b.brand}</b>
  <div className="text-xs text-muted mt-px flex items-center gap-1">{b.count} คอมเมนต์ <Star className="w-[13px] h-[13px] text-neu" /> {b.avg_rating ?? "-"}</div>
  </div>
- <div className="h-[9px] rounded-md bg-[#f9fafb] overflow-hidden flex flex-1 min-w-[120px]" title="บวก/กลาง/ลบ">
- <i style={{ width: `${((s.positive || 0) / tot) * 100}%`, background: "#16a34a" }} />
- <i style={{ width: `${((s.neutral || 0) / tot) * 100}%`, background: "#d97706" }} />
- <i style={{ width: `${((s.negative || 0) / tot) * 100}%`, background: "#dc2626" }} />
- </div>
+ <div className="flex-1 min-w-[120px]"><SentimentBar positive={s.positive || 0} neutral={s.neutral || 0} negative={s.negative || 0} /></div>
  <div className="text-right min-w-[150px] flex-none flex items-center justify-end gap-2">
- {b.urgent_count > 0 && <span className="text-[11px] text-neg font-semibold whitespace-nowrap"> {b.urgent_count}</span>}
+ {b.urgent_count > 0 && <span className="text-[11px] text-neg font-semibold whitespace-nowrap">ด่วน {b.urgent_count}</span>}
  <span className="pill" style={{ background: dirBg(b.sentiment_score), color: dirColor(b.sentiment_score) }}>{b.direction}</span>
  <span className="text-muted text-xs w-9 text-right">{fmtScore(b.sentiment_score)}</span>
  </div>
