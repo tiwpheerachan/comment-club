@@ -5,6 +5,7 @@ import { sevColors } from "@/lib/ui";
 import { SentChip, ShopeeLink } from "./common";
 import { Download, Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
+import ReplyBox from "./ReplyBox";
 
 interface Filters {
   brand: string;
@@ -202,13 +203,21 @@ export default function ExploreClient({
                         {r.severity ?? 0}
                       </span>
                     </td>
-                    <td className="p-3 max-w-[420px]">
+                    <td className="p-3 max-w-[460px]">
                       <div className="text-[13.5px]">{r.comment_text}</div>
                       <ImageThumbs images={r.images} size={44} max={5} />
                       {r.suggested_action && (
                         <div className="text-[12px] text-shopee mt-1">→ {r.suggested_action}</div>
                       )}
-                      <div className="mt-1"><ShopeeLink shopId={r.shop_id} itemId={r.product_name} /></div>
+                      {r.note && (
+                        <div className="text-[12px] mt-1.5 p-1.5 rounded-lg bg-pos-bg/60 border border-pos/20 text-ink">
+                          ตอบแล้ว{r.assignee ? ` โดย ${r.assignee}` : ""}: {r.note}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        <ShopeeLink shopId={r.shop_id} itemId={r.product_name} />
+                      </div>
+                      <ReplyBox comment={r} onSent={() => fetchData(page)} />
                     </td>
                     <td className="p-3">
                       <span className="chip">{r.category || "-"}</span>

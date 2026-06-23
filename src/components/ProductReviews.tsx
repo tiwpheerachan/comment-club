@@ -1,10 +1,12 @@
 "use client";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { CommentRow } from "@/lib/db";
 import { sevColors } from "@/lib/ui";
 import { SentChip, ShopeeLink } from "./common";
 import { Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
+import ReplyBox from "./ReplyBox";
 
 type Tab = "all" | "negative" | "positive" | "urgent" | "withimg";
 const TABS: { key: Tab; label: string }[] = [
@@ -16,6 +18,7 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function ProductReviews({ comments }: { comments: CommentRow[] }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("all");
   const [q, setQ] = useState("");
 
@@ -94,7 +97,13 @@ export default function ProductReviews({ comments }: { comments: CommentRow[] })
               <div className="text-[14px] text-ink leading-relaxed">{r.comment_text}</div>
               <ImageThumbs images={r.images} size={56} max={8} />
               {r.suggested_action && <div className="text-[12.5px] text-shopee mt-1.5">→ {r.suggested_action}</div>}
+              {r.note && (
+                <div className="text-[12.5px] mt-2 p-2 rounded-lg bg-pos-bg/60 border border-pos/20 text-ink">
+                  ตอบแล้ว{r.assignee ? ` โดย ${r.assignee}` : ""}: {r.note}
+                </div>
+              )}
               <div className="mt-1.5"><ShopeeLink shopId={r.shop_id} itemId={r.product_name} /></div>
+              <ReplyBox comment={r} onSent={() => router.refresh()} />
             </div>
           );
         })}

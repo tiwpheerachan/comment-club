@@ -18,17 +18,34 @@ const BY_CATEGORY: Record<string, string> = {
     "ขออภัยเรื่องการชำระเงินด้วยนะคะ รบกวนแจ้งรายละเอียด/หลักฐานการชำระมาทางแชท ทางร้านจะรีบตรวจสอบและแก้ไขให้ทันทีค่ะ",
 };
 
-const POSITIVE =
-  "ขอบคุณมากเลยนะคะ ดีใจที่ถูกใจสินค้า ฝากกดติดตามร้านและรอโปรโมชั่นดี ๆ ครั้งหน้าด้วยนะคะ";
+// คำตอบเชิงบวกหลายแบบ (เลือกแบบคงที่ตาม comment_id เพื่อไม่ให้ซ้ำกันทุกคอมเมนต์)
+const POSITIVE: string[] = [
+  "ขอบคุณมากเลยนะคะ ดีใจที่ถูกใจสินค้า ฝากกดติดตามร้านและรอโปรโมชั่นดี ๆ ครั้งหน้าด้วยนะคะ",
+  "ขอบคุณสำหรับรีวิวดี ๆ นะคะ เป็นกำลังใจให้ทีมงานมากเลยค่ะ แล้วกลับมาอุดหนุนกันใหม่นะคะ",
+  "ขอบคุณที่ไว้วางใจเลือกซื้อสินค้าของเรานะคะ หากต้องการคำแนะนำเพิ่มเติมทักแชทมาได้ตลอดเลยค่ะ",
+  "ดีใจที่ลูกค้าพอใจค่ะ ขอบคุณที่สละเวลารีวิวนะคะ ฝากบอกต่อเพื่อน ๆ และติดตามร้านไว้ด้วยนะคะ",
+];
+// คำตอบกลาง ๆ (neutral / สอบถาม)
+const NEUTRAL =
+  "ขอบคุณสำหรับความคิดเห็นนะคะ หากมีข้อสงสัยหรืออยากให้ช่วยเหลือเพิ่มเติม ทักแชทเข้ามาได้เลยค่ะ ทางร้านยินดีดูแลค่ะ";
 const HARD =
   "ขออภัยอย่างสูงค่ะ ทางร้านขอตรวจสอบเรื่องนี้อย่างเร่งด่วน รบกวนทักแชทมาพร้อมเลขออเดอร์ เราจะรีบดูแลและหาทางแก้ไขให้เร็วที่สุดค่ะ";
 const GENERIC_NEG =
   "ขออภัยในความไม่สะดวกด้วยนะคะ รบกวนแจ้งรายละเอียดและเลขออเดอร์มาทางแชท ทางร้านจะรีบตรวจสอบและดูแลให้ค่ะ";
 
-export function suggestReply(opts: { category?: string | null; sentiment?: string | null; urgent?: boolean | null }): string {
-  const { category, sentiment, urgent } = opts;
-  if (sentiment === "positive") return POSITIVE;
+/** เลือก index คงที่จาก seed (comment_id) — คำตอบเดิมเสมอสำหรับคอมเมนต์เดียวกัน */
+function pick(arr: string[], seed?: string | null): string {
+  if (!seed) return arr[0];
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return arr[h % arr.length];
+}
+
+export function suggestReply(opts: { category?: string | null; sentiment?: string | null; urgent?: boolean | null; seed?: string | null }): string {
+  const { category, sentiment, urgent, seed } = opts;
+  if (sentiment === "positive") return pick(POSITIVE, seed);
   if (urgent && (!category || category === "อื่น ๆ")) return HARD;
   if (category && BY_CATEGORY[category]) return BY_CATEGORY[category];
+  if (sentiment === "neutral" && !urgent) return NEUTRAL;
   return urgent ? HARD : GENERIC_NEG;
 }
