@@ -118,6 +118,160 @@ export function monthlyForecast(daily: { date: string; units: number }[], horizo
   return out;
 }
 
+// ---------- เครื่องมือ Data Science เชิงลึก ----------
+const DAY_MS = 86400000;
+const toUTC = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+const fromUTC = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+const std = (a: number[]) => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+
+/** เติมวันที่ขาด (= 0) ให้ดีมานด์ต่อเนื่อง */
+export function densifyDaily(daily: { date: string; units: number }[]): { date: string; units: number }[] {
+  if (!daily.length) return [];
+  const sorted = [...daily].sort((a, b) => toUTC(a.date) - toUTC(b.date));
+  const map = new Map(sorted.map((d) => [d.date, d.units]));
+  const out: { date: string; units: number }[] = [];
+  for (let t = toUTC(sorted[0].date); t <= toUTC(sorted[sorted.length - 1].date); t += DAY_MS) {
+    const d = fromUTC(t); out.push({ date: d, units: map.get(d) ?? 0 });
+  }
+  return out;
+}
+
+// ---- จำแนกรูปแบบดีมานด์ (Syntetos–Boylan: ADI & CV²) ----
+export interface DemandPattern { adi: number; cv2: number; klass: string; note: string; predictability: "ดี" | "ปานกลาง" | "ยาก" }
+export function demandPattern(daily: { date: string; units: number }[]): DemandPattern | null {
+  const arr = densifyDaily(daily).map((d) => d.units);
+  if (arr.length < 14) return null;
+  const nz = arr.filter((v) => v > 0);
+  if (nz.length < 3) return { adi: arr.length, cv2: 0, klass: "ขายนาน ๆ ครั้ง", note: "ขายไม่บ่อย — พยากรณ์รายวันไม่เหมาะ ใช้ค่าเฉลี่ยระยะยาวแทน", predictability: "ยาก" };
+  const adi = +(arr.length / nz.length).toFixed(2);
+  const cv = std(nz) / (mean(nz) || 1);
+  const cv2 = +(cv * cv).toFixed(2);
+  const erratic = cv2 >= 0.49, intermittent = adi >= 1.32;
+  let klass: string, note: string, predictability: DemandPattern["predictability"];
+  if (!intermittent && !erratic) { klass = "สม่ำเสมอ (Smooth)"; note = "ขายต่อเนื่องสม่ำเสมอ — พยากรณ์แม่นยำสูง วางสต๊อกได้มั่นใจ"; predictability = "ดี"; }
+  else if (intermittent && !erratic) { klass = "ขายเป็นช่วง (Intermittent)"; note = "ขายเป็นช่วง ๆ ขนาดสม่ำเสมอ — ควรเผื่อ safety stock"; predictability = "ปานกลาง"; }
+  else if (!intermittent && erratic) { klass = "ผันผวน (Erratic)"; note = "ขายบ่อยแต่ปริมาณแกว่งแรง — ต้อง safety stock สูง"; predictability = "ปานกลาง"; }
+  else { klass = "กระจุก/คาดยาก (Lumpy)"; note = "ขายไม่บ่อยและปริมาณแกว่งแรง — พยากรณ์ยาก ระวังสต๊อกค้าง/ขาด"; predictability = "ยาก"; }
+  return { adi, cv2, klass, note, predictability };
+}
+
+// ---- Safety stock เชิงสถิติ (service level) ----
+const Z: Record<number, number> = { 90: 1.2816, 95: 1.6449, 97: 1.8808, 99: 2.3263 };
+export interface SafetyRow { service: number; safety: number; reorderPoint: number }
+export interface StockScience {
+  meanDaily: number; sigmaDaily: number;
+  table: SafetyRow[];
+  stockoutRisk: number | null;  // ความน่าจะเป็นของขาดสต๊อกในช่วง lead time (%)
+  recommendedService: number;
+}
+const normCdf = (z: number) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)); const d = 0.3989423 * Math.exp(-z * z / 2); let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); if (z > 0) p = 1 - p; return p; };
+
+export function stockScience(daily: { date: string; units: number }[], leadTime: number, currentStock: number | null, windowDays = 90): StockScience {
+  const arr = densifyDaily(daily).slice(-windowDays).map((d) => d.units);
+  const meanDaily = mean(arr);
+  const sigmaDaily = std(arr);
+  const sigmaLT = sigmaDaily * Math.sqrt(leadTime);
+  const table: SafetyRow[] = [90, 95, 99].map((s) => {
+    const safety = Math.ceil(Z[s] * sigmaLT);
+    return { service: s, safety, reorderPoint: Math.ceil(meanDaily * leadTime + safety) };
+  });
+  let stockoutRisk: number | null = null;
+  if (currentStock != null && sigmaLT > 0) {
+    const z = (currentStock - meanDaily * leadTime) / sigmaLT;
+    stockoutRisk = +((1 - normCdf(z)) * 100).toFixed(1);
+  }
+  // แนะนำ service level ตามความผันผวน (ผันผวนมาก → ตั้งสูง)
+  const cv = meanDaily > 0 ? sigmaDaily / meanDaily : 0;
+  const recommendedService = cv > 1 ? 99 : cv > 0.5 ? 95 : 90;
+  return { meanDaily: +meanDaily.toFixed(2), sigmaDaily: +sigmaDaily.toFixed(2), table, stockoutRisk, recommendedService };
+}
+
+// ---- ความแม่นของโมเดล (จากคู่ค่าจริง-พยากรณ์ย้อนหลัง) ----
+export interface Quality { wape: number; mape: number | null; bias: number; rmse: number; n: number; grade: string }
+export function forecastQuality(pairs: { actual: number; forecast: number }[]): Quality | null {
+  const p = pairs.filter((x) => x.actual != null);
+  if (p.length < 7) return null;
+  let absErr = 0, sumA = 0, sumErr = 0, sq = 0; const mapeArr: number[] = [];
+  for (const { actual, forecast } of p) {
+    const e = forecast - actual;
+    absErr += Math.abs(e); sumA += actual; sumErr += e; sq += e * e;
+    if (actual > 0) mapeArr.push(Math.abs(e) / actual);
+  }
+  const wape = sumA > 0 ? +((absErr / sumA) * 100).toFixed(1) : 0;
+  const mape = mapeArr.length ? +(mean(mapeArr) * 100).toFixed(1) : null;
+  const bias = sumA > 0 ? +((sumErr / sumA) * 100).toFixed(1) : 0; // >0 = พยากรณ์สูงไป
+  const rmse = +Math.sqrt(sq / p.length).toFixed(1);
+  const grade = wape <= 20 ? "แม่นยำสูง" : wape <= 35 ? "ดี" : wape <= 50 ? "พอใช้" : "ควรระวัง";
+  return { wape, mape, bias, rmse, n: p.length, grade };
+}
+
+// ---- OLS regression หลายตัวแปร (Gaussian elimination) ----
+function ols(X: number[][], y: number[]): { coef: number[]; r2: number } | null {
+  const n = X.length, k = X[0]?.length ?? 0;
+  if (n <= k) return null;
+  // A = X'X (k×k), b = X'y
+  const A = Array.from({ length: k }, () => new Array(k).fill(0));
+  const b = new Array(k).fill(0);
+  for (let i = 0; i < n; i++) for (let a = 0; a < k; a++) { b[a] += X[i][a] * y[i]; for (let c = 0; c < k; c++) A[a][c] += X[i][a] * X[i][c]; }
+  // แก้ระบบ Ax=b
+  for (let col = 0; col < k; col++) {
+    let piv = col; for (let r = col + 1; r < k; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+    if (Math.abs(A[piv][col]) < 1e-9) return null;
+    [A[col], A[piv]] = [A[piv], A[col]]; [b[col], b[piv]] = [b[piv], b[col]];
+    for (let r = 0; r < k; r++) if (r !== col) { const f = A[r][col] / A[col][col]; for (let c = col; c < k; c++) A[r][c] -= f * A[col][c]; b[r] -= f * b[col]; }
+  }
+  const coef = b.map((v, i) => v / A[i][i]);
+  const yb = mean(y); let ssTot = 0, ssRes = 0;
+  for (let i = 0; i < n; i++) { const pred = X[i].reduce((s, x, j) => s + x * coef[j], 0); ssRes += (y[i] - pred) ** 2; ssTot += (y[i] - yb) ** 2; }
+  return { coef, r2: ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0 };
+}
+
+export interface EnvModel {
+  r2: number; n: number;
+  terms: { factor: string; label: string; beta: number; impact: string }[]; // beta = สัมประสิทธิ์มาตรฐาน
+  summary: string;
+}
+/** Regression ยอดขายรายสัปดาห์ ~ เทรนด์ + PM2.5 + อุณหภูมิ + ฝน → วัดว่าปัจจัยไหนขับเคลื่อนจริง (คุมตัวแปรอื่น) */
+export function envRegression(daily: { date: string; units: number }[], envDaily: { date: string; pm2_5: number | null; temp_mean: number | null; precip: number | null }[]): EnvModel | null {
+  const dens = densifyDaily(daily);
+  if (dens.length < 56) return null; // ต้องมีอย่างน้อย ~8 สัปดาห์
+  const envMap = new Map(envDaily.map((e) => [e.date, e]));
+  // รวมเป็นรายสัปดาห์
+  const weeks = new Map<number, { u: number; pm: number[]; t: number[]; p: number[]; idx: number }>();
+  const t0 = toUTC(dens[0].date);
+  for (const d of dens) {
+    const w = Math.floor((toUTC(d.date) - t0) / (7 * DAY_MS));
+    const b = weeks.get(w) ?? { u: 0, pm: [], t: [], p: [], idx: w };
+    b.u += d.units;
+    const e = envMap.get(d.date);
+    if (e) { if (e.pm2_5 != null) b.pm.push(e.pm2_5); if (e.temp_mean != null) b.t.push(e.temp_mean); if (e.precip != null) b.p.push(e.precip); }
+    weeks.set(w, b);
+  }
+  const rows = [...weeks.values()].filter((w) => w.pm.length && w.t.length).sort((a, b) => a.idx - b.idx);
+  if (rows.length < 8) return null;
+  const y = rows.map((r) => r.u);
+  const pm = rows.map((r) => mean(r.pm)), tp = rows.map((r) => mean(r.t)), pr = rows.map((r) => mean(r.p)), tr = rows.map((r) => r.idx);
+  // มาตรฐานฟีเจอร์ (z-score) เพื่อให้ coefficient เทียบกันได้
+  const zfy = (a: number[]) => { const m = mean(a), s = std(a) || 1; return { z: a.map((x) => (x - m) / s), s }; };
+  const Y = zfy(y), PM = zfy(pm), TP = zfy(tp), PR = zfy(pr), TR = zfy(tr);
+  const X = rows.map((_, i) => [1, TR.z[i], PM.z[i], TP.z[i], PR.z[i]]);
+  const res = ols(X, Y.z);
+  if (!res) return null;
+  const [, bTrend, bPm, bTemp, bPrecip] = res.coef;
+  const factors = [
+    { factor: "trend", label: "แนวโน้มเวลา", beta: bTrend },
+    { factor: "pm2_5", label: "ฝุ่น PM2.5", beta: bPm },
+    { factor: "temp_mean", label: "อุณหภูมิ", beta: bTemp },
+    { factor: "precip", label: "ปริมาณฝน", beta: bPrecip },
+  ].map((f) => ({ ...f, beta: +f.beta.toFixed(2), impact: Math.abs(f.beta) >= 0.3 ? "สูง" : Math.abs(f.beta) >= 0.15 ? "ปานกลาง" : "ต่ำ" }))
+    .sort((a, b) => Math.abs(b.beta) - Math.abs(a.beta));
+  const top = factors.find((f) => f.factor !== "trend" && Math.abs(f.beta) >= 0.15);
+  const summary = res.r2 >= 0.3
+    ? `โมเดลอธิบายยอดขายได้ ${Math.round(res.r2 * 100)}%${top ? ` • ปัจจัยเด่น: ${top.label} (${top.beta >= 0 ? "ยิ่งสูงยิ่งขายดี" : "ยิ่งสูงยิ่งขายน้อย"})` : ""}`
+    : `ยอดขายผูกกับปัจจัยแวดล้อม/เวลาไม่ชัด (R²=${Math.round(res.r2 * 100)}%) — น่าจะขับเคลื่อนด้วยแคมเปญ/ราคา`;
+  return { r2: +res.r2.toFixed(2), n: rows.length, terms: factors, summary };
+}
+
 // ---------- ปัจจัยแวดล้อม (correlation) ----------
 export interface EnvMonthly { month: string; pm2_5: number | null; temp_mean: number | null; precip: number | null }
 

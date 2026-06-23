@@ -40,7 +40,7 @@ export default async function StockDetailPage({ params }: { params: Promise<{ id
   return (
     <>
       <PageHeader title={product.name || product.product_id} subtitle={`${product.brand || "-"} • รหัส ${product.product_id}`} />
-      <StockDetailClient product={product} demand={demand} envMonthly={envMonthly} />
+      <StockDetailClient product={product} demand={demand} envMonthly={envMonthly} envDaily={env} />
     </>
   );
 }
