@@ -7,13 +7,14 @@ import { Chat } from "./icons";
 
 const REPLY_MAX = 500;
 
-type ReplyTarget = Pick<CommentRow, "comment_id" | "category" | "sentiment" | "urgent">;
+type ReplyTarget = Pick<CommentRow, "comment_id" | "category" | "sentiment" | "urgent" | "seller_reply">;
 
 /**
  * กล่องร่าง+ส่งคำตอบไป Shopee — ใช้ได้ทุกหน้า (ทั้งคอมเมนต์บวก/ลบ/ด่วน)
  * ตอบกลับสำเร็จ → comment ถูกตั้ง resolved (เก็บใน comment_replies + comments.note)
  */
 export default function ReplyBox({ comment, onSent, openLabel = "ตอบกลับคอมเมนต์" }: { comment: ReplyTarget; onSent?: () => void; openLabel?: string }) {
+  const alreadyReplied = Boolean(comment.seller_reply);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(() => suggestReply({ category: comment.category, sentiment: comment.sentiment, urgent: comment.urgent, seed: comment.comment_id }));
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -43,10 +44,15 @@ export default function ReplyBox({ comment, onSent, openLabel = "ตอบกล
   return (
     <div className="mt-2">
       <button onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-shopee hover:underline">
-        <Chat className="w-3.5 h-3.5" /> {open ? "ซ่อนคำตอบ" : openLabel}
+        <Chat className="w-3.5 h-3.5" /> {open ? "ซ่อนคำตอบ" : alreadyReplied ? "ตอบเพิ่ม/แก้คำตอบ" : openLabel}
       </button>
       {open && (
         <div className="mt-2 border border-line rounded-xl p-3 bg-slate-50/60">
+          {alreadyReplied && (
+            <div className="text-[11.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2">
+              คอมเมนต์นี้มีคำตอบจากผู้ขายอยู่แล้วบน Shopee — การส่งใหม่จะเป็นการตอบ/แก้ทับ
+            </div>
+          )}
           <div className="text-[11px] text-muted mb-1.5">ร่างอัตโนมัติ (แก้ไขได้) — ปรับให้เหมาะแล้วกดส่งไป Shopee</div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className={`w-full bg-white border rounded-lg p-2.5 text-[13px] leading-relaxed ${over ? "border-neg" : "border-line"}`} />
           <div className="flex items-center justify-between mt-1">

@@ -86,6 +86,9 @@ export function aggregate(results: AnalyzedComment[], windowDays: number): Summa
         category: cat,
         severity: r.severity,
         suggested_action: r.suggested_action,
+        seller_reply: r.seller_reply ?? null,
+        seller_reply_at: r.seller_reply_at ?? null,
+        seller_reply_hidden: r.seller_reply_hidden ?? null,
         images: r.images ?? [],
       });
     }

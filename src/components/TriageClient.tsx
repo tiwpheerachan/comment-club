@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getAdminName, getDefaultBrand } from "@/lib/admin";
 import type { CommentRow } from "@/lib/db";
 import { sevColors } from "@/lib/ui";
-import { ShopeeLink } from "./common";
+import { SellerReplyBadge, ShopeeLink } from "./common";
 import { Chat, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 import ReplyBox from "./ReplyBox";
@@ -112,6 +112,7 @@ export default function TriageClient({ brands = [], team = [] }: { brands?: stri
  <div className="text-[14px] text-ink leading-relaxed">“{r.comment_text}”</div>
  <ImageThumbs images={r.images} size={56} max={6} />
  {r.suggested_action && <div className="text-[12.5px] text-shopee mt-1.5">→ {r.suggested_action}</div>}
+ <SellerReplyBadge reply={r.seller_reply} at={r.seller_reply_at} hidden={r.seller_reply_hidden} />
  {r.note && <div className="text-[12.5px] mt-2 p-2 rounded-lg bg-cc/5 border border-cc/20 text-ink flex items-start gap-1.5"><Chat className="w-4 h-4 text-cc flex-none mt-0.5" /><span>ตอบกลับแล้ว{r.assignee ? ` โดย ${r.assignee}` : ""}: {r.note}</span></div>}
 
  <div className="flex items-center gap-2 mt-3 flex-wrap">

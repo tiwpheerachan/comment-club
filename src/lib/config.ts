@@ -27,6 +27,8 @@ export const COLUMNS: Record<string, string | null> = {
   username: "buyer_username",
   created_at: "ctime", // unix epoch (วินาที) — แปลงด้วย CREATED_AT_EXPR
   order_id: "order_sn",
+  seller_reply: "reply", // คำตอบจากผู้ขายที่ตอบไปแล้วบน Shopee
+  // seller_reply_at / seller_reply_hidden จัดการแบบ special-case ใน selectExpr (ไม่ผ่าน COLUMNS)
 };
 
 // คอลัมน์เวลา (ctime) เป็น INT64 unix-seconds → ต้องแปลงเป็น TIMESTAMP ก่อนใช้กรอง/เรียง
@@ -100,4 +102,8 @@ export const PIPELINE_SECRET = process.env.PIPELINE_SECRET || "";
 export const STD_FIELDS = [
   "comment_id", "brand", "shop_id", "shop_name", "product_name", "product_id",
   "rating", "comment_text", "username", "created_at", "order_id",
+  "seller_reply", "seller_reply_at", "seller_reply_hidden",
 ] as const;
+
+// expression แปลงเวลาคำตอบผู้ขาย (reply_ctime เป็น unix-seconds, 0 = ไม่มี)
+export const SELLER_REPLY_AT_EXPR = "TIMESTAMP_SECONDS(NULLIF(`reply_ctime`, 0))";

@@ -48,6 +48,9 @@ export interface CommentRow {
   status: string | null;
   assignee: string | null;
   note: string | null;
+  seller_reply: string | null;
+  seller_reply_at: string | null;
+  seller_reply_hidden: boolean | null;
   images: string[] | null;
 }
 
@@ -60,6 +63,7 @@ export interface CommentFilters {
   assignee?: string;
   brandsIn?: string[]; // จำกัดเฉพาะแบรนด์เหล่านี้ (สิทธิ์การเข้าถึง)
   urgentOnly?: boolean;
+  replied?: "yes" | "no"; // มีคำตอบจากผู้ขายแล้ว / ยังไม่มี
   minSeverity?: number;
   q?: string;
   from?: string; // ISO date
@@ -70,7 +74,7 @@ export interface CommentFilters {
 }
 
 const COMMENT_COLS =
-  "comment_id, brand, shop_id, product_name, rating, comment_text, username, created_at, sentiment, category, severity, summary, suggested_action, urgent, status, assignee, note, images";
+  "comment_id, brand, shop_id, product_name, rating, comment_text, username, created_at, sentiment, category, severity, summary, suggested_action, urgent, status, assignee, note, seller_reply, seller_reply_at, seller_reply_hidden, images";
 
 export async function getProductStats(opts: { limit?: number; worstFirst?: boolean } = {}) {
   const sb = getServiceClient();
@@ -186,6 +190,8 @@ export async function listComments(f: CommentFilters): Promise<{ rows: CommentRo
   if (f.status) query = query.eq("status", f.status);
   if (f.assignee) query = query.eq("assignee", f.assignee);
   if (f.urgentOnly) query = query.eq("urgent", true);
+  if (f.replied === "yes") query = query.not("seller_reply", "is", null);
+  if (f.replied === "no") query = query.is("seller_reply", null);
   if (typeof f.minSeverity === "number") query = query.gte("severity", f.minSeverity);
   if (f.from) query = query.gte("created_at", f.from);
   if (f.to) query = query.lte("created_at", f.to);

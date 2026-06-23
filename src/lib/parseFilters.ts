@@ -12,6 +12,7 @@ export function parseFilters(sp: URLSearchParams): CommentFilters {
     status: sp.get("status") || undefined,
     assignee: sp.get("assignee") || undefined,
     urgentOnly: sp.get("urgent") === "1" || sp.get("urgent") === "true",
+    replied: sp.get("replied") === "yes" ? "yes" : sp.get("replied") === "no" ? "no" : undefined,
     minSeverity: num("minSeverity"),
     q: sp.get("q") || undefined,
     from: sp.get("from") || undefined,

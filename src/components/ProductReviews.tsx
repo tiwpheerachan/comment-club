@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CommentRow } from "@/lib/db";
 import { sevColors } from "@/lib/ui";
-import { SentChip, ShopeeLink } from "./common";
+import { SellerReplyBadge, SentChip, ShopeeLink } from "./common";
 import { Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 import ReplyBox from "./ReplyBox";
@@ -97,6 +97,7 @@ export default function ProductReviews({ comments }: { comments: CommentRow[] })
               <div className="text-[14px] text-ink leading-relaxed">{r.comment_text}</div>
               <ImageThumbs images={r.images} size={56} max={8} />
               {r.suggested_action && <div className="text-[12.5px] text-shopee mt-1.5">→ {r.suggested_action}</div>}
+              <SellerReplyBadge reply={r.seller_reply} at={r.seller_reply_at} hidden={r.seller_reply_hidden} />
               {r.note && (
                 <div className="text-[12.5px] mt-2 p-2 rounded-lg bg-pos-bg/60 border border-pos/20 text-ink">
                   ตอบแล้ว{r.assignee ? ` โดย ${r.assignee}` : ""}: {r.note}

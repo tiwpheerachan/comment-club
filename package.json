@@ -13,6 +13,7 @@
     "retention": "tsx scripts/retention.ts",
     "gmv": "tsx scripts/gmv.ts",
     "backfill-shopid": "tsx scripts/backfill-shopid.ts",
+    "backfill-seller-reply": "tsx scripts/backfill-seller-reply.ts",
     "dryrun": "tsx scripts/dryrun.ts",
     "migrate": "tsx scripts/migrate.ts",
     "create-admin": "tsx scripts/create-admin.ts",

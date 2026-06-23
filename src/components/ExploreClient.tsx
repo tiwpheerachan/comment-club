@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CommentRow } from "@/lib/db";
 import { sevColors } from "@/lib/ui";
-import { SentChip, ShopeeLink } from "./common";
+import { SellerReplyBadge, SentChip, ShopeeLink } from "./common";
 import { Download, Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 import ReplyBox from "./ReplyBox";
@@ -15,6 +15,7 @@ interface Filters {
   status: string;
   q: string;
   urgentOnly: boolean;
+  replied: string; // "" | "yes" | "no"
   sort: string;
 }
 
@@ -37,6 +38,7 @@ export default function ExploreClient({
     status: "",
     q: "",
     urgentOnly: false,
+    replied: "",
     sort: "created_desc",
   });
   const [page, setPage] = useState(1);
@@ -54,6 +56,7 @@ export default function ExploreClient({
       if (f.status) q.set("status", f.status);
       if (f.q) q.set("q", f.q);
       if (f.urgentOnly) q.set("urgent", "1");
+      if (f.replied) q.set("replied", f.replied);
       q.set("sort", f.sort);
       q.set("page", String(p));
       q.set("pageSize", String(PAGE_SIZE));
@@ -130,6 +133,11 @@ export default function ExploreClient({
             <option value="new">ยังไม่จัดการ</option>
             <option value="in_progress">กำลังจัดการ</option>
             <option value="resolved">จัดการแล้ว</option>
+          </select>
+          <select className={inputCls} value={f.replied} onChange={(e) => set("replied", e.target.value)} title="คำตอบจากผู้ขายบน Shopee">
+            <option value="">ตอบ/ยังไม่ตอบ</option>
+            <option value="no">ยังไม่ตอบ</option>
+            <option value="yes">ตอบแล้ว</option>
           </select>
           <label className="flex items-center gap-1.5 text-[13px] text-ink cursor-pointer">
             <input type="checkbox" checked={f.urgentOnly} onChange={(e) => set("urgentOnly", e.target.checked)} />
@@ -209,6 +217,7 @@ export default function ExploreClient({
                       {r.suggested_action && (
                         <div className="text-[12px] text-shopee mt-1">→ {r.suggested_action}</div>
                       )}
+                      <SellerReplyBadge reply={r.seller_reply} at={r.seller_reply_at} hidden={r.seller_reply_hidden} />
                       {r.note && (
                         <div className="text-[12px] mt-1.5 p-1.5 rounded-lg bg-pos-bg/60 border border-pos/20 text-ink">
                           ตอบแล้ว{r.assignee ? ` โดย ${r.assignee}` : ""}: {r.note}

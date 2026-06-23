@@ -1,5 +1,20 @@
 import { dirBg, dirColor, fmtScore, shopeeProductUrl } from "@/lib/ui";
-import { ExternalLink } from "./icons";
+import { Chat, ExternalLink } from "./icons";
+
+/** ป้ายแสดง "คำตอบจากผู้ขาย" ที่ตอบไปแล้วบน Shopee (ดึงจากต้นทาง) */
+export function SellerReplyBadge({ reply, at, hidden }: { reply?: string | null; at?: string | null; hidden?: boolean | null }) {
+  if (!reply) return null;
+  const when = at ? new Date(at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" }) : null;
+  return (
+    <div className="mt-2 p-2.5 rounded-lg bg-shopee/5 border border-shopee/25 text-ink">
+      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-shopee mb-0.5">
+        <Chat className="w-3.5 h-3.5" /> ตอบกลับจากผู้ขายแล้วบน Shopee{when ? ` • ${when}` : ""}
+        {hidden && <span className="text-[10.5px] font-medium text-muted">(ถูกซ่อน)</span>}
+      </div>
+      <div className="text-[12.5px] leading-relaxed">{reply}</div>
+    </div>
+  );
+}
 
 /** ลิงก์ไปหน้าสินค้า Shopee (ส่วนรีวิว) — ซ่อนเองถ้าสร้างลิงก์ไม่ได้ */
 export function ShopeeLink({ shopId, itemId, className = "" }: { shopId?: string | number | null; itemId?: string | number | null; className?: string }) {

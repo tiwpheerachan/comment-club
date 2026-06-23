@@ -15,6 +15,9 @@ export interface RawComment {
   username: string | null;
   created_at: string | null; // ISO string
   order_id: string | null;
+  seller_reply: string | null;       // คำตอบจากผู้ขายที่ตอบไปแล้วบน Shopee
+  seller_reply_at: string | null;    // ISO เวลาที่ผู้ขายตอบ
+  seller_reply_hidden: boolean | null; // คำตอบถูกซ่อนบน Shopee หรือไม่
   images: string[]; // URL รูปที่ลูกค้าแนบ (Shopee CDN)
 }
 
@@ -55,6 +58,9 @@ export interface UrgentItem {
   category: string;
   severity: number;
   suggested_action: string;
+  seller_reply: string | null;
+  seller_reply_at: string | null;
+  seller_reply_hidden: boolean | null;
   images: string[];
 }
 

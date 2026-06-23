@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { BigQuery } from "@google-cloud/bigquery";
-import { BIGQUERY, COLUMNS, CREATED_AT_EXPR, STD_FIELDS, TEXT_ONLY_WHERE } from "./config";
+import { BIGQUERY, COLUMNS, CREATED_AT_EXPR, SELLER_REPLY_AT_EXPR, STD_FIELDS, TEXT_ONLY_WHERE } from "./config";
 import type { RawComment } from "./types";
 
 /** auto-detect service-account.json ที่รากโปรเจกต์ ถ้าไม่ได้ตั้ง GOOGLE_APPLICATION_CREDENTIALS */
@@ -24,6 +24,8 @@ function client(): BigQuery {
 function selectExpr(): string {
   const base = STD_FIELDS.map((std) => {
     if (std === "created_at") return `${CREATED_AT_EXPR} AS created_at`;
+    if (std === "seller_reply_at") return `${SELLER_REPLY_AT_EXPR} AS seller_reply_at`;
+    if (std === "seller_reply_hidden") return `\`reply_hidden\` AS seller_reply_hidden`;
     const real = COLUMNS[std];
     return real ? `\`${real}\` AS ${std}` : `NULL AS ${std}`;
   });
@@ -65,6 +67,9 @@ function normalizeRow(row: Record<string, unknown>): RawComment {
     username: row.username != null ? String(row.username) : null,
     created_at: toIso(row.created_at),
     order_id: row.order_id != null ? String(row.order_id) : null,
+    seller_reply: row.seller_reply != null && String(row.seller_reply) !== "" ? String(row.seller_reply) : null,
+    seller_reply_at: toIso(row.seller_reply_at),
+    seller_reply_hidden: row.seller_reply_hidden == null ? null : Boolean(row.seller_reply_hidden),
     images: Array.isArray(row.images) ? (row.images as unknown[]).map(String).filter(Boolean) : [],
   };
 }
@@ -382,6 +387,23 @@ export async function fetchShopIds(commentIds: string[]): Promise<Map<string, nu
   });
   for (const r of rows as Record<string, unknown>[]) {
     if (r.comment_id != null && r.shop_id != null) out.set(String(r.comment_id), Number(r.shop_id));
+  }
+  return out;
+}
+
+export interface SellerReplyRow { reply: string; at: string | null; hidden: boolean }
+/** ดึง comment_id → คำตอบผู้ขาย (เฉพาะรายที่มี reply จริง) สำหรับ backfill */
+export async function fetchAllSellerReplies(): Promise<Map<string, SellerReplyRow>> {
+  const out = new Map<string, SellerReplyRow>();
+  const [rows] = await client().query({
+    query: `SELECT comment_id, reply, ${SELLER_REPLY_AT_EXPR} AS reply_at, reply_hidden AS hidden
+            FROM ${fqTable()}
+            WHERE reply IS NOT NULL AND reply != ''`,
+    location: BIGQUERY.location,
+  });
+  for (const r of rows as Record<string, unknown>[]) {
+    if (r.comment_id == null) continue;
+    out.set(String(r.comment_id), { reply: String(r.reply), at: toIso(r.reply_at), hidden: Boolean(r.hidden) });
   }
   return out;
 }
