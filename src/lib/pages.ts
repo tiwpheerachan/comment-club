@@ -11,6 +11,7 @@ export const PAGES: PageDef[] = [
   { key: "replies", label: "การตอบกลับของทีม", path: "/replies" },
   { key: "retention", label: "Retention ลูกค้า", path: "/retention" },
   { key: "forecast", label: "พยากรณ์ยอดขาย", path: "/forecast" },
+  { key: "stock", label: "พยากรณ์สินค้า & สต๊อก", path: "/stock" },
   { key: "trends", label: "เทรนด์ / รายงาน", path: "/trends" },
   { key: "settings", label: "ตั้งค่า", path: "/settings" },
 ];

@@ -1,5 +1,6 @@
 // ตัวช่วย query Supabase สำหรับหน้า Products / Explore / Triage / Trends / Settings
 import { getServiceClient } from "./supabase";
+import type { ProductCatalogRow } from "./product-analytics";
 
 export interface ProductStat {
   product_name: string; // = item_id (key)
@@ -402,6 +403,69 @@ export async function getReplyAgentStats(): Promise<ReplyAgentStat[]> {
 export async function getReplyAgents(): Promise<string[]> {
   const stats = await getReplyAgentStats();
   return stats.map((s) => s.name).filter((n) => n !== "ไม่ระบุ");
+}
+
+// ---- พยากรณ์สินค้า & สต๊อก ----
+export async function getProductCatalog(opts: { brand?: string; q?: string; limit?: number } = {}): Promise<ProductCatalogRow[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  let q = sb.from("product_catalog").select("product_id, platform, name, brand, stock, reserved, stock_at, avg_daily_30, avg_daily_90, units_90").order("units_90", { ascending: false, nullsFirst: false }).limit(opts.limit ?? 3000);
+  if (opts.brand) q = q.eq("brand", opts.brand);
+  const { data, error } = await q;
+  if (error || !data) return [];
+  let rows = data as unknown as ProductCatalogRow[];
+  if (opts.q) {
+    const t = opts.q.toLowerCase();
+    rows = rows.filter((r) => (r.name || "").toLowerCase().includes(t) || (r.brand || "").toLowerCase().includes(t) || r.product_id.includes(t));
+  }
+  return rows;
+}
+
+export async function getProductCatalogOne(productId: string): Promise<ProductCatalogRow | null> {
+  const sb = getServiceClient();
+  if (!sb) return null;
+  const { data } = await sb.from("product_catalog").select("product_id, platform, name, brand, stock, reserved, stock_at, avg_daily_30, avg_daily_90, units_90").eq("product_id", productId).maybeSingle();
+  return (data as unknown as ProductCatalogRow) ?? null;
+}
+
+export async function getProductBrands(): Promise<string[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const set = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("product_catalog").select("brand").range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) if (r.brand) set.add(String(r.brand));
+    if (data.length < 1000) break;
+  }
+  return [...set].sort();
+}
+
+export async function getProductDemand(productId: string): Promise<{ date: string; units: number; gmv: number }[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const out: { date: string; units: number; gmv: number }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("product_demand_daily").select("date, units, gmv").eq("product_id", productId).order("date", { ascending: true }).range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) out.push({ date: String(r.date), units: Number(r.units) || 0, gmv: Number(r.gmv) || 0 });
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+export interface EnvDayRow { date: string; pm2_5: number | null; temp_mean: number | null; temp_max: number | null; precip: number | null }
+export async function getEnvDaily(): Promise<EnvDayRow[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const out: EnvDayRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("env_daily").select("date, pm2_5, temp_mean, temp_max, precip").order("date", { ascending: true }).range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) out.push({ date: String(r.date), pm2_5: r.pm2_5 as number, temp_mean: r.temp_mean as number, temp_max: r.temp_max as number, precip: r.precip as number });
+    if (data.length < 1000) break;
+  }
+  return out;
 }
 
 // ---- ยอดขายรายวัน (Forecasting) ----

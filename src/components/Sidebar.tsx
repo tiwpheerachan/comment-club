@@ -17,6 +17,7 @@ const NAV = [
   { href: "/replies", key: "replies", label: "การตอบกลับของทีม", Icon: Chat },
   { href: "/retention", key: "retention", label: "Retention ลูกค้า", Icon: Users },
   { href: "/forecast", key: "forecast", label: "พยากรณ์ยอดขาย", Icon: Forecast },
+  { href: "/stock", key: "stock", label: "พยากรณ์สินค้า & สต๊อก", Icon: Box },
   { href: "/trends", key: "trends", label: "เทรนด์ / รายงาน", Icon: Trend },
   { href: "/settings", key: "settings", label: "ตั้งค่า", Icon: Gear },
 ];

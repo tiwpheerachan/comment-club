@@ -445,6 +445,64 @@ export async function fetchGmvDaily(): Promise<GmvRow[]> {
   return rows;
 }
 
+// ---------- พยากรณ์สินค้า & สต๊อก ----------
+export interface DemandRow { product_id: string; product_name: string | null; brand: string | null; platform: string | null; date: string; units: number; gmv: number }
+export interface StockRow { product_id: string; platform: string; stock: number; reserved: number; name: string | null; brand: string | null }
+
+/** ยอดขายรายวันของสินค้าที่ยังเคลื่อนไหว (ขายได้ใน 90 วันล่าสุด) — เก็บเฉพาะวันที่มียอด */
+export async function fetchActiveProductDemand(historyDays = 540): Promise<DemandRow[]> {
+  const G = `\`${BIGQUERY.projectId}.Canonical.product_gmv_daily\``;
+  const [rows] = await client().query({
+    query: `
+      WITH active AS (
+        SELECT product_id FROM ${G}
+        WHERE report_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY) AND units_sold > 0 AND product_id IS NOT NULL
+        GROUP BY product_id
+      )
+      SELECT CAST(g.product_id AS STRING) product_id,
+             ANY_VALUE(g.product_name) product_name,
+             ANY_VALUE(g.brand_name) brand,
+             ANY_VALUE(g.platform) platform,
+             CAST(g.report_date AS STRING) date,
+             SUM(g.units_sold) units, SUM(g.gmv) gmv
+      FROM ${G} g JOIN active a ON g.product_id = a.product_id
+      WHERE g.report_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY) AND g.units_sold > 0
+      GROUP BY g.product_id, g.report_date`,
+    params: { days: historyDays }, types: { days: "INT64" }, location: BIGQUERY.location,
+  });
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    product_id: String(r.product_id), product_name: r.product_name != null ? String(r.product_name) : null,
+    brand: r.brand != null ? String(r.brand) : null, platform: r.platform != null ? String(r.platform) : null,
+    date: String(r.date), units: Number(r.units) || 0, gmv: Number(r.gmv) || 0,
+  }));
+}
+
+/** สต๊อกคงเหลือล่าสุดต่อสินค้า (Shopee จาก catalog snapshot ล่าสุด + TikTok จาก skus) */
+export async function fetchProductStock(): Promise<StockRow[]> {
+  const C = `\`${BIGQUERY.projectId}.Canonical.shopee_product_catalog\``;
+  const T = `\`${BIGQUERY.projectId}.Platform.tiktok_product_skus\``;
+  const [rows] = await client().query({
+    query: `
+      SELECT CAST(item_id AS STRING) product_id, 'shopee' platform,
+             SUM(model_stock) stock, SUM(model_reserved_stock) reserved,
+             ANY_VALUE(item_name) name, ANY_VALUE(product_brand_name) brand
+      FROM ${C} WHERE partition_date = (SELECT MAX(partition_date) FROM ${C}) AND item_id IS NOT NULL
+      GROUP BY item_id
+      UNION ALL
+      SELECT CAST(product_id AS STRING) product_id, 'tiktok_shop' platform,
+             SUM(inventory_total_quantity) stock, 0 reserved,
+             CAST(NULL AS STRING) name, CAST(NULL AS STRING) brand
+      FROM ${T} WHERE fetched_date = (SELECT MAX(fetched_date) FROM ${T}) AND product_id IS NOT NULL
+      GROUP BY product_id`,
+    location: BIGQUERY.location,
+  });
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    product_id: String(r.product_id), platform: String(r.platform),
+    stock: Number(r.stock) || 0, reserved: Number(r.reserved) || 0,
+    name: r.name != null ? String(r.name) : null, brand: r.brand != null ? String(r.brand) : null,
+  }));
+}
+
 /** ทดสอบการเชื่อมต่อ */
 export async function healthcheck(): Promise<boolean> {
   await client().query({ query: "SELECT 1 AS ok", location: BIGQUERY.location });

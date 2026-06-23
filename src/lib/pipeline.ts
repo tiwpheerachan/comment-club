@@ -2,7 +2,8 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { aggregate } from "./aggregate";
 import { analyze } from "./analyzer";
-import { fetchGmvDaily, fetchNewComments, fetchProducts, fetchRetention } from "./bigquery";
+import { fetchActiveProductDemand, fetchGmvDaily, fetchNewComments, fetchProductStock, fetchProducts, fetchRetention } from "./bigquery";
+import { fetchEnvDaily } from "./env";
 import { PIPELINE } from "./config";
 import { getServiceClient } from "./supabase";
 import { clean } from "./text";
@@ -185,6 +186,84 @@ export async function runGmvSync(): Promise<void> {
   await syncGmv(sb, true);
 }
 
+const dayStr = (offsetDays = 0) => { const d = new Date(); d.setDate(d.getDate() + offsetDays); return d.toISOString().slice(0, 10); };
+
+/** sync ปัจจัยแวดล้อม (อากาศ + PM2.5) จาก Open-Meteo */
+async function syncEnv(sb: SupabaseClient, force = false): Promise<void> {
+  let start = dayStr(-760); // ~2 ปี
+  if (!force) {
+    const { data } = await sb.from("env_daily").select("date").order("date", { ascending: false }).limit(1).maybeSingle();
+    if (data?.date) start = dayStr(-20); // incremental: เติม 20 วันล่าสุด + อนาคต
+  }
+  const rows = await fetchEnvDaily(start, dayStr(16));
+  if (!rows.length) return;
+  const payload = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }));
+  for (let i = 0; i < payload.length; i += 500) {
+    const { error } = await sb.from("env_daily").upsert(payload.slice(i, i + 500), { onConflict: "date" });
+    if (error) throw new Error(`upsert env_daily: ${error.message}`);
+  }
+  console.log(`[pipeline] sync env ${rows.length} วัน`);
+}
+
+/** sync ดีมานด์รายสินค้า + สต๊อก + สรุป → product_demand_daily / product_catalog */
+async function syncProductForecast(sb: SupabaseClient): Promise<void> {
+  const demand = await fetchActiveProductDemand(540);
+  // 1) upsert ยอดขายรายวัน
+  const dd = demand.map((r) => ({ product_id: r.product_id, date: r.date, units: r.units, gmv: r.gmv }));
+  for (let i = 0; i < dd.length; i += 500) {
+    const { error } = await sb.from("product_demand_daily").upsert(dd.slice(i, i + 500), { onConflict: "product_id,date" });
+    if (error) throw new Error(`upsert product_demand_daily: ${error.message}`);
+  }
+
+  // 2) สรุปดีมานด์ต่อสินค้า (30/90 วัน)
+  const c30 = dayStr(-30), c90 = dayStr(-90);
+  interface Agg { product_id: string; name: string | null; brand: string | null; platform: string | null; u30: number; u90: number }
+  const agg = new Map<string, Agg>();
+  for (const r of demand) {
+    const a = agg.get(r.product_id) ?? { product_id: r.product_id, name: r.product_name, brand: r.brand, platform: r.platform, u30: 0, u90: 0 };
+    if (r.date >= c90) a.u90 += r.units;
+    if (r.date >= c30) a.u30 += r.units;
+    if (!a.name && r.product_name) a.name = r.product_name;
+    if (!a.brand && r.brand) a.brand = r.brand;
+    agg.set(r.product_id, a);
+  }
+
+  // 3) สต๊อกล่าสุด
+  const stock = await fetchProductStock();
+  const stockMap = new Map(stock.map((s) => [s.product_id, s]));
+  const now = new Date().toISOString();
+
+  // 4) upsert ทะเบียนสินค้า (เฉพาะสินค้าที่ยังเคลื่อนไหว)
+  const rows = [...agg.values()].map((a) => {
+    const s = stockMap.get(a.product_id);
+    return {
+      product_id: a.product_id, platform: a.platform, name: a.name, brand: a.brand,
+      stock: s ? s.stock : null, reserved: s ? s.reserved : null, stock_at: s ? now : null,
+      avg_daily_30: +(a.u30 / 30).toFixed(3), avg_daily_90: +(a.u90 / 90).toFixed(3), units_90: a.u90,
+      updated_at: now,
+    };
+  });
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await sb.from("product_catalog").upsert(rows.slice(i, i + 500), { onConflict: "product_id" });
+    if (error) throw new Error(`upsert product_catalog: ${error.message}`);
+  }
+  console.log(`[pipeline] sync product forecast: ${rows.length} สินค้า, ${dd.length} แถวยอดขาย, สต๊อก ${stock.length}`);
+}
+
+/** บังคับ sync ปัจจัยแวดล้อม (npm run env) */
+export async function runEnvSync(): Promise<void> {
+  const sb = getServiceClient();
+  if (!sb) throw new Error("ยังไม่ได้เชื่อม Supabase");
+  await syncEnv(sb, true);
+}
+
+/** บังคับ sync พยากรณ์สินค้า (npm run product-forecast) */
+export async function runProductForecastSync(): Promise<void> {
+  const sb = getServiceClient();
+  if (!sb) throw new Error("ยังไม่ได้เชื่อม Supabase");
+  await syncProductForecast(sb);
+}
+
 /** sync ยอดขายรายวันจาก BigQuery → Supabase (ข้ามถ้าข้อมูลล่าสุดทันสมัยแล้ว) */
 async function syncGmv(sb: SupabaseClient, force = false): Promise<void> {
   if (!force) {
@@ -271,6 +350,18 @@ export async function runPipeline(): Promise<RunResult> {
       await syncGmv(sb);
     } catch (e) {
       console.error("[pipeline] sync GMV ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+    }
+
+    // 3.8) sync ปัจจัยแวดล้อม + พยากรณ์สินค้า/สต๊อก
+    try {
+      await syncEnv(sb);
+    } catch (e) {
+      console.error("[pipeline] sync env ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+    }
+    try {
+      await syncProductForecast(sb);
+    } catch (e) {
+      console.error("[pipeline] sync product forecast ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
     }
 
     const summary = aggregate(windowComments, PIPELINE.windowDays);
