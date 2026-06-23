@@ -18,6 +18,11 @@ envVarGroups:
       # GOOGLE_APPLICATION_CREDENTIALS ชี้ไปที่ Secret File (เพิ่มไฟล์ service-account.json ใน Dashboard)
       - key: GOOGLE_APPLICATION_CREDENTIALS
         value: /etc/secrets/service-account.json
+      # Shopee reply proxy (ตอบกลับคอมเมนต์)
+      - key: SHOPEE_REPLY_API_URL
+        value: https://ecom-data-platform.onrender.com/api/shopee/reply-comment
+      - key: SHOPEE_REPLY_API_KEY
+        sync: false
 
 services:
   # ---------- เว็บแอป (Next.js) ----------

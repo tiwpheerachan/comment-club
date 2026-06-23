@@ -367,6 +367,24 @@ export async function fetchRetention(): Promise<RetentionData> {
   };
 }
 
+/** หา shop_id จาก comment_id (สำหรับตอบกลับ Shopee) */
+export async function fetchShopIds(commentIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const ids = commentIds.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  if (ids.length === 0) return out;
+  const fq = fqTable();
+  const [rows] = await client().query({
+    query: `SELECT comment_id, shop_id FROM ${fq} WHERE comment_id IN UNNEST(@ids)`,
+    params: { ids },
+    types: { ids: ["INT64"] },
+    location: BIGQUERY.location,
+  });
+  for (const r of rows as Record<string, unknown>[]) {
+    if (r.comment_id != null && r.shop_id != null) out.set(String(r.comment_id), Number(r.shop_id));
+  }
+  return out;
+}
+
 /** ทดสอบการเชื่อมต่อ */
 export async function healthcheck(): Promise<boolean> {
   await client().query({ query: "SELECT 1 AS ok", location: BIGQUERY.location });
