@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="font-sans antialiased">
         {profile ? (
           <div className="flex min-h-screen bg-[#f6f7f9]">
-            <Sidebar user={{ name: profile.name, email: profile.email, role: profile.role }} />
+            <Sidebar user={{ name: profile.name, email: profile.email, role: profile.role, allowed_pages: profile.allowed_pages }} />
             <main className="flex-1 min-w-0">{children}</main>
           </div>
         ) : (

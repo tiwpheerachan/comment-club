@@ -1,15 +1,18 @@
 import PageHeader from "@/components/PageHeader";
 import ProductsGrid from "@/components/ProductsGrid";
-import { NotReady } from "@/components/common";
+import { NoAccess, NotReady } from "@/components/common";
 import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getProductStats } from "@/lib/db";
+import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductsPage() {
   const configured = hasSupabase();
-  const allowed = allowedBrandsOf(await getCurrentProfile());
+  const me = await getCurrentProfile();
+  if (!canAccess(me, "products")) return <NoAccess />;
+  const allowed = allowedBrandsOf(me);
   const all = configured ? await getProductStats({ worstFirst: true, limit: 2000 }) : [];
   const products = all.filter((p) => p.total >= 2 && (!allowed || (p.brand != null && allowed.includes(p.brand))));
 

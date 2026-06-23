@@ -7,6 +7,7 @@ export interface Profile {
   name: string | null;
   role: "super_admin" | "admin" | "staff" | string;
   allowed_brands: string[];
+  allowed_pages: string[];
   active: boolean;
 }
 
@@ -16,7 +17,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const svc = getServiceClient();
-  const fallback: Profile = { id: user.id, email: user.email ?? null, name: user.email ?? null, role: "staff", allowed_brands: [], active: true };
+  const fallback: Profile = { id: user.id, email: user.email ?? null, name: user.email ?? null, role: "staff", allowed_brands: [], allowed_pages: [], active: true };
   if (!svc) return fallback;
   const { data } = await svc.from("profiles").select("*").eq("id", user.id).maybeSingle();
   return (data as Profile) ?? fallback;

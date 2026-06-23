@@ -3,8 +3,11 @@ import { resolve } from "node:path";
 import PageHeader from "@/components/PageHeader";
 import ProfileSettings from "@/components/ProfileSettings";
 import RunPipelineButton from "@/components/RunPipelineButton";
+import { NoAccess } from "@/components/common";
+import { getCurrentProfile } from "@/lib/auth";
 import { AI, BIGQUERY, COLUMNS, PIPELINE, URGENT_RULES } from "@/lib/config";
 import { getActivity, getDistinct, getRuns, getTeam } from "@/lib/db";
+import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +24,7 @@ function Status({ ok, label, detail }: { ok: boolean; label: string; detail: str
 }
 
 export default async function SettingsPage() {
+  if (!canAccess(await getCurrentProfile(), "settings")) return <NoAccess />;
   const supabaseOk = hasSupabase();
   const bqCreds =
     Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS) ||

@@ -1,13 +1,15 @@
 import PageHeader from "@/components/PageHeader";
 import TriageClient from "@/components/TriageClient";
-import { NotReady } from "@/components/common";
+import { NoAccess, NotReady } from "@/components/common";
 import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getDistinct, getTeam } from "@/lib/db";
+import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export default async function TriagePage() {
+  if (!canAccess(await getCurrentProfile(), "triage")) return <NoAccess />;
   if (!hasSupabase()) {
     return (
       <>

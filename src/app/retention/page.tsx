@@ -1,12 +1,15 @@
 import PageHeader from "@/components/PageHeader";
 import RetentionClient from "@/components/RetentionClient";
-import { NotReady } from "@/components/common";
+import { NoAccess, NotReady } from "@/components/common";
+import { getCurrentProfile } from "@/lib/auth";
 import { getRetention } from "@/lib/db";
+import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export default async function RetentionPage() {
+  if (!canAccess(await getCurrentProfile(), "retention")) return <NoAccess />;
   if (!hasSupabase()) {
     return (
       <>

@@ -1,8 +1,9 @@
 import ExploreClient from "@/components/ExploreClient";
 import PageHeader from "@/components/PageHeader";
-import { NotReady } from "@/components/common";
+import { NoAccess, NotReady } from "@/components/common";
 import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
 import { getDistinct } from "@/lib/db";
+import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export default async function ExplorePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  const me = await getCurrentProfile();
+  if (!canAccess(me, "explore")) return <NoAccess />;
   const configured = hasSupabase();
   if (!configured) {
     return (
@@ -22,7 +25,7 @@ export default async function ExplorePage({
     );
   }
   const sp = await searchParams;
-  const allowed = allowedBrandsOf(await getCurrentProfile());
+  const allowed = allowedBrandsOf(me);
   const { brands: allBrands, categories } = await getDistinct();
   const brands = allowed ? allBrands.filter((b) => allowed.includes(b)) : allBrands;
 

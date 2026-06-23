@@ -23,13 +23,14 @@ export async function POST(req: NextRequest) {
   const sb = await guard();
   if (!sb) return NextResponse.json({ error: "ต้องเป็น super admin" }, { status: 403 });
   try {
-    const { email, password, name, role, allowed_brands } = await req.json();
+    const { email, password, name, role, allowed_brands, allowed_pages } = await req.json();
     if (!email || !password) return NextResponse.json({ error: "ต้องมีอีเมลและรหัสผ่าน" }, { status: 400 });
     const { data, error } = await sb.auth.admin.createUser({ email, password, email_confirm: true });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     await sb.from("profiles").upsert({
       id: data.user.id, email, name: name || email, role: role || "staff",
-      allowed_brands: Array.isArray(allowed_brands) ? allowed_brands : [], active: true,
+      allowed_brands: Array.isArray(allowed_brands) ? allowed_brands : [],
+      allowed_pages: Array.isArray(allowed_pages) ? allowed_pages : [], active: true,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
@@ -41,12 +42,13 @@ export async function PATCH(req: NextRequest) {
   const sb = await guard();
   if (!sb) return NextResponse.json({ error: "ต้องเป็น super admin" }, { status: 403 });
   try {
-    const { id, name, role, allowed_brands, active, password } = await req.json();
+    const { id, name, role, allowed_brands, allowed_pages, active, password } = await req.json();
     if (!id) return NextResponse.json({ error: "ต้องมี id" }, { status: 400 });
     const patch: Record<string, unknown> = {};
     if (name !== undefined) patch.name = name;
     if (role !== undefined) patch.role = role;
     if (allowed_brands !== undefined) patch.allowed_brands = allowed_brands;
+    if (allowed_pages !== undefined) patch.allowed_pages = allowed_pages;
     if (active !== undefined) patch.active = active;
     if (Object.keys(patch).length) await sb.from("profiles").update(patch).eq("id", id);
     if (password) {

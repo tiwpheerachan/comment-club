@@ -66,6 +66,17 @@ export function SentChip({ s }: { s: string | null }) {
   );
 }
 
+export function NoAccess() {
+  return (
+    <div className="p-7">
+      <div className="card card-pad max-w-xl">
+        <h2 className="font-bold text-neg mb-1.5">ไม่มีสิทธิ์เข้าถึงหน้านี้</h2>
+        <p className="text-muted text-sm">บัญชีของคุณยังไม่ได้รับสิทธิ์เข้าถึงแท็บนี้ — ติดต่อผู้ดูแลระบบ (super admin) เพื่อขอสิทธิ์</p>
+      </div>
+    </div>
+  );
+}
+
 export function NotReady({ configured }: { configured: boolean }) {
   return (
     <div className="p-7">

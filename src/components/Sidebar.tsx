@@ -3,27 +3,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { setAdminName } from "@/lib/admin";
+import { canAccess } from "@/lib/pages";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Alert, Bars, Box, Compass, Gear, Logout, Search, Shield, Trend, Users } from "./icons";
 import Logo from "./Logo";
 
 const NAV = [
-  { href: "/", label: "ภาพรวม", Icon: Compass },
-  { href: "/brands", label: "รายแบรนด์", Icon: Bars },
-  { href: "/products", label: "รายสินค้า", Icon: Box },
-  { href: "/explore", label: "สำรวจคอมเมนต์", Icon: Search },
-  { href: "/triage", label: "ศูนย์จัดการด่วน", Icon: Alert },
-  { href: "/retention", label: "Retention ลูกค้า", Icon: Users },
-  { href: "/trends", label: "เทรนด์ / รายงาน", Icon: Trend },
-  { href: "/settings", label: "ตั้งค่า", Icon: Gear },
+  { href: "/", key: "overview", label: "ภาพรวม", Icon: Compass },
+  { href: "/brands", key: "brands", label: "รายแบรนด์", Icon: Bars },
+  { href: "/products", key: "products", label: "รายสินค้า", Icon: Box },
+  { href: "/explore", key: "explore", label: "สำรวจคอมเมนต์", Icon: Search },
+  { href: "/triage", key: "triage", label: "ศูนย์จัดการด่วน", Icon: Alert },
+  { href: "/retention", key: "retention", label: "Retention ลูกค้า", Icon: Users },
+  { href: "/trends", key: "trends", label: "เทรนด์ / รายงาน", Icon: Trend },
+  { href: "/settings", key: "settings", label: "ตั้งค่า", Icon: Gear },
 ];
 
 const ROLE_LABEL: Record<string, string> = { super_admin: "ผู้ดูแลระบบสูงสุด", admin: "ผู้ดูแล", staff: "พนักงาน" };
 
-export default function Sidebar({ user }: { user: { name: string | null; email: string | null; role: string } }) {
+export default function Sidebar({ user }: { user: { name: string | null; email: string | null; role: string; allowed_pages?: string[] } }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   const display = user.name || user.email || "ผู้ใช้";
+  const nav = NAV.filter((n) => canAccess(user, n.key));
 
   // seed ชื่อผู้ใช้จริงให้ระบบ actor (ใช้ใน triage/reply)
   useEffect(() => { if (user.name || user.email) setAdminName(user.name || user.email || ""); }, [user.name, user.email]);
@@ -41,7 +43,7 @@ export default function Sidebar({ user }: { user: { name: string | null; email: 
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ href, label, Icon }) => (
+        {nav.map(({ href, label, Icon }) => (
           <Link key={href} href={href} className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-sm transition-colors ${active(href) ? "bg-shopee/10 text-shopee font-semibold" : "text-ink/80 hover:bg-gray-100"}`}>
             <Icon className="w-[18px] h-[18px]" /> {label}
           </Link>

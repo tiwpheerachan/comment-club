@@ -1,12 +1,15 @@
 import PageHeader from "@/components/PageHeader";
 import TrendsClient from "@/components/TrendsClient";
-import { NotReady } from "@/components/common";
+import { NoAccess, NotReady } from "@/components/common";
+import { getCurrentProfile } from "@/lib/auth";
 import { getBrandStats, getCategoryDaily, getDailyBrandTrend, getDailyTrend, getProductStats } from "@/lib/db";
+import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export default async function TrendsPage() {
+  if (!canAccess(await getCurrentProfile(), "trends")) return <NoAccess />;
   if (!hasSupabase()) {
     return (
       <>

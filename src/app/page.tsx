@@ -1,10 +1,14 @@
 import Dashboard from "@/components/Dashboard";
+import { NoAccess } from "@/components/common";
+import { getCurrentProfile } from "@/lib/auth";
+import { canAccess } from "@/lib/pages";
 import { getSummary, getTrend } from "@/lib/store";
 
 // อ่านสด ๆ ทุกครั้ง (ข้อมูลมาจาก Supabase ที่ pipeline ดึงจาก BigQuery)
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
+  if (!canAccess(await getCurrentProfile(), "overview")) return <NoAccess />;
   const [{ summary, configured }, trend] = await Promise.all([getSummary(), getTrend()]);
 
   if (!summary) {
