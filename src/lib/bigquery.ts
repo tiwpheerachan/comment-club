@@ -385,6 +385,30 @@ export async function fetchShopIds(commentIds: string[]): Promise<Map<string, nu
   return out;
 }
 
+// ---------- ยอดขายรายวัน (Forecasting) ----------
+export interface GmvRow { scope: string; date: string; gmv: number; units: number; net_sales: number | null }
+
+export async function fetchGmvDaily(): Promise<GmvRow[]> {
+  const G = `\`${BIGQUERY.projectId}.Canonical.product_gmv_daily\``;
+  const O = `\`${BIGQUERY.projectId}.Canonical.order_financials\``;
+  const c = client();
+  const run = async (q: string) => (await c.query({ query: q, location: BIGQUERY.location }))[0] as Record<string, unknown>[];
+  const num = (v: unknown) => (v == null ? 0 : Number(v));
+
+  const [allR, platR, brandR, netR] = await Promise.all([
+    run(`SELECT CAST(report_date AS STRING) d, SUM(gmv) gmv, SUM(units_sold) units FROM ${G} GROUP BY 1`),
+    run(`SELECT CAST(report_date AS STRING) d, platform, SUM(gmv) gmv, SUM(units_sold) units FROM ${G} WHERE platform IS NOT NULL GROUP BY 1,2`),
+    run(`SELECT CAST(report_date AS STRING) d, brand_id, SUM(gmv) gmv, SUM(units_sold) units FROM ${G} WHERE brand_id IS NOT NULL GROUP BY 1,2`),
+    run(`SELECT CAST(order_date AS STRING) d, SUM(net_sales) net FROM ${O} WHERE order_date IS NOT NULL GROUP BY 1`),
+  ]);
+  const netMap = new Map(netR.map((r) => [String(r.d), num(r.net)]));
+  const rows: GmvRow[] = [];
+  for (const r of allR) rows.push({ scope: "ALL", date: String(r.d), gmv: num(r.gmv), units: num(r.units), net_sales: netMap.get(String(r.d)) ?? null });
+  for (const r of platR) rows.push({ scope: "platform:" + r.platform, date: String(r.d), gmv: num(r.gmv), units: num(r.units), net_sales: null });
+  for (const r of brandR) rows.push({ scope: "brand:" + r.brand_id, date: String(r.d), gmv: num(r.gmv), units: num(r.units), net_sales: null });
+  return rows;
+}
+
 /** ทดสอบการเชื่อมต่อ */
 export async function healthcheck(): Promise<boolean> {
   await client().query({ query: "SELECT 1 AS ok", location: BIGQUERY.location });

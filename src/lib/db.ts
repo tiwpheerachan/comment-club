@@ -314,6 +314,45 @@ export async function getRetention(): Promise<RetentionBundle> {
 }
 
 /** ค่าที่ไม่ซ้ำสำหรับเติม dropdown ฟิลเตอร์ (brand/category) */
+// ---- ยอดขายรายวัน (Forecasting) ----
+export interface GmvDayRow { date: string; gmv: number; units: number; net_sales: number | null }
+
+export async function getGmvDaily(scope = "ALL"): Promise<GmvDayRow[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const out: GmvDayRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb
+      .from("gmv_daily")
+      .select("date,gmv,units,net_sales")
+      .eq("scope", scope)
+      .order("date", { ascending: true })
+      .range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) out.push({ date: String(r.date), gmv: Number(r.gmv) || 0, units: Number(r.units) || 0, net_sales: r.net_sales == null ? null : Number(r.net_sales) });
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+/** รายชื่อ scope ที่มีข้อมูล (สำหรับตัวกรอง) */
+export async function getGmvScopes(): Promise<{ platforms: string[]; brands: string[] }> {
+  const sb = getServiceClient();
+  if (!sb) return { platforms: [], brands: [] };
+  const platforms = new Set<string>(), brands = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("gmv_daily").select("scope").range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) {
+      const s = String(r.scope);
+      if (s.startsWith("platform:")) platforms.add(s.slice(9));
+      else if (s.startsWith("brand:")) brands.add(s.slice(6));
+    }
+    if (data.length < 1000) break;
+  }
+  return { platforms: [...platforms].sort(), brands: [...brands].sort() };
+}
+
 export async function getDistinct(): Promise<{ brands: string[]; categories: string[] }> {
   const sb = getServiceClient();
   if (!sb) return { brands: [], categories: [] };

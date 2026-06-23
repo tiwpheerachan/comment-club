@@ -11,6 +11,7 @@
     "pipeline": "tsx scripts/pipeline.ts",
     "introspect": "tsx scripts/introspect.ts",
     "retention": "tsx scripts/retention.ts",
+    "gmv": "tsx scripts/gmv.ts",
     "dryrun": "tsx scripts/dryrun.ts",
     "migrate": "tsx scripts/migrate.ts",
     "create-admin": "tsx scripts/create-admin.ts",

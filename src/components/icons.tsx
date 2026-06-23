@@ -41,6 +41,14 @@ export const Trend = make(
     <polyline points="16 7 22 7 22 13" />
   </>
 );
+export const Forecast = make(
+  <>
+    <path d="M3 3v18h18" />
+    <polyline points="6 14 10 10 13 13 18 7" />
+    <path d="M18 7l-3.5 0M18 7l0 3.5" strokeDasharray="0" />
+    <polyline points="18 7 21 4" strokeDasharray="2 2" />
+  </>
+);
 export const Pie = make(
   <>
     <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />

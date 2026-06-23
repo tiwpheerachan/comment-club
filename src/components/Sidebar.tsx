@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { setAdminName } from "@/lib/admin";
 import { canAccess } from "@/lib/pages";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
-import { Alert, Bars, Box, Compass, Gear, Logout, Search, Shield, Trend, Users } from "./icons";
+import { Alert, Bars, Box, Compass, Forecast, Gear, Logout, Search, Shield, Trend, Users } from "./icons";
 import Logo from "./Logo";
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/explore", key: "explore", label: "สำรวจคอมเมนต์", Icon: Search },
   { href: "/triage", key: "triage", label: "ศูนย์จัดการด่วน", Icon: Alert },
   { href: "/retention", key: "retention", label: "Retention ลูกค้า", Icon: Users },
+  { href: "/forecast", key: "forecast", label: "พยากรณ์ยอดขาย", Icon: Forecast },
   { href: "/trends", key: "trends", label: "เทรนด์ / รายงาน", Icon: Trend },
   { href: "/settings", key: "settings", label: "ตั้งค่า", Icon: Gear },
 ];

@@ -9,6 +9,7 @@ export const PAGES: PageDef[] = [
   { key: "explore", label: "สำรวจคอมเมนต์", path: "/explore" },
   { key: "triage", label: "ศูนย์จัดการด่วน", path: "/triage" },
   { key: "retention", label: "Retention ลูกค้า", path: "/retention" },
+  { key: "forecast", label: "พยากรณ์ยอดขาย", path: "/forecast" },
   { key: "trends", label: "เทรนด์ / รายงาน", path: "/trends" },
   { key: "settings", label: "ตั้งค่า", path: "/settings" },
 ];

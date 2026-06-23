@@ -2,7 +2,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { aggregate } from "./aggregate";
 import { analyze } from "./analyzer";
-import { fetchNewComments, fetchProducts, fetchRetention } from "./bigquery";
+import { fetchGmvDaily, fetchNewComments, fetchProducts, fetchRetention } from "./bigquery";
 import { PIPELINE } from "./config";
 import { getServiceClient } from "./supabase";
 import { clean } from "./text";
@@ -174,6 +174,32 @@ export async function runRetentionSync(): Promise<void> {
   await syncRetention(sb, true);
 }
 
+/** บังคับ sync GMV เดี๋ยวนี้ (สำหรับ npm run gmv) */
+export async function runGmvSync(): Promise<void> {
+  const sb = getServiceClient();
+  if (!sb) throw new Error("ยังไม่ได้เชื่อม Supabase");
+  await syncGmv(sb, true);
+}
+
+/** sync ยอดขายรายวันจาก BigQuery → Supabase (ข้ามถ้าข้อมูลล่าสุดทันสมัยแล้ว) */
+async function syncGmv(sb: SupabaseClient, force = false): Promise<void> {
+  if (!force) {
+    const { data } = await sb.from("gmv_daily").select("date").eq("scope", "ALL").order("date", { ascending: false }).limit(1).maybeSingle();
+    if (data?.date) {
+      const last = new Date(data.date as string);
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+      if (last >= new Date(yesterday.toISOString().slice(0, 10))) { console.log("[pipeline] ข้าม GMV (ทันสมัยแล้ว)"); return; }
+    }
+  }
+  const rows = await fetchGmvDaily();
+  const payload = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }));
+  for (let i = 0; i < payload.length; i += 500) {
+    const { error } = await sb.from("gmv_daily").upsert(payload.slice(i, i + 500), { onConflict: "scope,date" });
+    if (error) throw new Error(`upsert gmv_daily: ${error.message}`);
+  }
+  console.log(`[pipeline] sync GMV ${rows.length} แถว`);
+}
+
 export async function runPipeline(): Promise<RunResult> {
   const sb = getServiceClient();
   if (!sb) {
@@ -234,6 +260,13 @@ export async function runPipeline(): Promise<RunResult> {
       await syncRetention(sb);
     } catch (e) {
       console.error("[pipeline] sync retention ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+    }
+
+    // 3.7) sync ยอดขายรายวัน (Forecasting)
+    try {
+      await syncGmv(sb);
+    } catch (e) {
+      console.error("[pipeline] sync GMV ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
     }
 
     const summary = aggregate(windowComments, PIPELINE.windowDays);
