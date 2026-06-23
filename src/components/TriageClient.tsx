@@ -134,20 +134,27 @@ export default function TriageClient({ brands = [], team = [] }: { brands?: stri
  );
 }
 
+const REPLY_MAX = 500;
 function ReplyBox({ comment, onSent }: { comment: CommentRow; onSent?: () => void }) {
  const [open, setOpen] = useState(false);
  const [text, setText] = useState(() => suggestReply({ category: comment.category, sentiment: comment.sentiment, urgent: comment.urgent }));
- const [msg, setMsg] = useState<string | null>(null);
+ const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
  const [sending, setSending] = useState(false);
 
+ const len = text.trim().length;
+ const over = len > REPLY_MAX;
+ const empty = len === 0;
+
  async function send() {
+ if (over || empty) return;
  setSending(true); setMsg(null);
  try {
  const res = await fetch("/api/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment_id: comment.comment_id, reply_text: text, replied_by: getAdminName() || null }) });
  const j = await res.json();
- setMsg(res.ok ? j.message : "ผิดพลาด: " + (j.error || res.status));
- if (res.ok) setTimeout(() => onSent?.(), 700);
- } catch (e) { setMsg("ผิดพลาด: " + (e instanceof Error ? e.message : e)); }
+ const ok = res.ok && j.ok !== false;
+ setMsg({ text: ok ? j.message : (j.message || "ผิดพลาด: " + (j.error || res.status)), ok });
+ if (ok) setTimeout(() => onSent?.(), 900);
+ } catch (e) { setMsg({ text: "ผิดพลาด: " + (e instanceof Error ? e.message : e), ok: false }); }
  setSending(false);
  }
 
@@ -158,13 +165,16 @@ function ReplyBox({ comment, onSent }: { comment: CommentRow; onSent?: () => voi
  </button>
  {open && (
  <div className="mt-2 border border-line rounded-xl p-3 bg-slate-50/60">
- <div className="text-[11px] text-muted mb-1.5">ร่างอัตโนมัติ (แก้ไขได้) — ปรับให้เหมาะแล้วกดส่ง/บันทึก</div>
- <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className="w-full bg-white border border-line rounded-lg p-2.5 text-[13px] leading-relaxed" />
+ <div className="text-[11px] text-muted mb-1.5">ร่างอัตโนมัติ (แก้ไขได้) — ปรับให้เหมาะแล้วกดส่งไป Shopee</div>
+ <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className={`w-full bg-white border rounded-lg p-2.5 text-[13px] leading-relaxed ${over ? "border-neg" : "border-line"}`} />
+ <div className="flex items-center justify-between mt-1">
+ <span className={`text-[11px] ${over ? "text-neg font-semibold" : "text-muted"}`}>{len}/{REPLY_MAX} ตัวอักษร{over ? " — ยาวเกินกำหนด" : ""}</span>
+ </div>
  <div className="flex items-center gap-2 mt-2 flex-wrap">
- <button onClick={send} disabled={sending} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-shopee text-white disabled:opacity-50">{sending ? "กำลังส่ง…" : " ส่ง/บันทึกคำตอบ"}</button>
+ <button onClick={send} disabled={sending || over || empty} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-shopee text-white disabled:opacity-50">{sending ? "กำลังส่ง…" : "ส่งไป Shopee"}</button>
  <button onClick={() => navigator.clipboard?.writeText(text)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-line">คัดลอก</button>
  <button onClick={() => setText(suggestReply({ category: comment.category, sentiment: comment.sentiment, urgent: comment.urgent }))} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-line text-muted">รีเซ็ตร่าง</button>
- {msg && <span className="text-[12px] text-pos">{msg}</span>}
+ {msg && <span className={`text-[12px] font-medium ${msg.ok ? "text-pos" : "text-neg"}`}>{msg.text}</span>}
  </div>
  </div>
  )}
