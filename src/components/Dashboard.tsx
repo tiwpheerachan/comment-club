@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { Summary, TrendPoint, UrgentItem } from "@/lib/types";
 import { dirBg, dirColor, fmtScore, sevColors } from "@/lib/ui";
 import { Alert, ArrowRight, Bars, Box, Chat, Check, Compass, Pie, Refresh, Scale, Star, Trend, Wrench } from "./icons";
-import { SentimentBar } from "./common";
+import { SentimentBar, ShopeeLink } from "./common";
 import ImageThumbs from "./ImageThumbs";
 import PageHeader from "./PageHeader";
 import SentimentChart from "./SentimentChart";
@@ -158,6 +158,7 @@ export default function Dashboard({ summary, trend }: { summary: Summary; trend:
  <div className="text-[12.5px] text-ink leading-snug line-clamp-3">“{u.comment_text}”</div>
  <ImageThumbs images={u.images} size={38} max={4} />
  {u.suggested_action && <div className="text-[11.5px] text-shopee mt-1 flex items-start gap-1"><ArrowRight className="w-3 h-3 mt-0.5 flex-none" />{u.suggested_action}</div>}
+ <div className="mt-1"><ShopeeLink shopId={u.shop_id} itemId={u.product_name} /></div>
  </div>
  );
  })}

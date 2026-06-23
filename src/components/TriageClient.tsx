@@ -4,6 +4,7 @@ import { getAdminName, getDefaultBrand } from "@/lib/admin";
 import type { CommentRow } from "@/lib/db";
 import { suggestReply } from "@/lib/reply";
 import { sevColors } from "@/lib/ui";
+import { ShopeeLink } from "./common";
 import { Chat, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 
@@ -106,6 +107,7 @@ export default function TriageClient({ brands = [], team = [] }: { brands?: stri
  <span className="chip !mb-0">{r.category || "-"}</span>
  {statusBadge(r.status)}
  {r.assignee && <span className="text-xs text-muted">ผู้รับผิดชอบ: {r.assignee}</span>}
+ <ShopeeLink shopId={r.shop_id} itemId={r.product_name} className="ml-auto" />
  </div>
  <div className="text-[14px] text-ink leading-relaxed">“{r.comment_text}”</div>
  <ImageThumbs images={r.images} size={56} max={6} />

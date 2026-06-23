@@ -56,6 +56,7 @@ function normalizeRow(row: Record<string, unknown>): RawComment {
   return {
     comment_id: String(row.comment_id ?? ""),
     brand: row.brand != null ? String(row.brand) : null,
+    shop_id: row.shop_id != null ? String(row.shop_id) : null,
     shop_name: row.shop_name != null ? String(row.shop_name) : null,
     product_name: row.product_name != null ? String(row.product_name) : null,
     product_id: row.product_id != null ? String(row.product_id) : null,
@@ -377,6 +378,19 @@ export async function fetchShopIds(commentIds: string[]): Promise<Map<string, nu
     query: `SELECT comment_id, shop_id FROM ${fq} WHERE comment_id IN UNNEST(@ids)`,
     params: { ids },
     types: { ids: ["INT64"] },
+    location: BIGQUERY.location,
+  });
+  for (const r of rows as Record<string, unknown>[]) {
+    if (r.comment_id != null && r.shop_id != null) out.set(String(r.comment_id), Number(r.shop_id));
+  }
+  return out;
+}
+
+/** ดึง comment_id → shop_id ทั้งหมด (เฉพาะคอมเมนต์ที่มีข้อความ) สำหรับ backfill */
+export async function fetchAllShopIds(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const [rows] = await client().query({
+    query: `SELECT comment_id, shop_id FROM ${fqTable()} WHERE (${TEXT_ONLY_WHERE}) AND shop_id IS NOT NULL`,
     location: BIGQUERY.location,
   });
   for (const r of rows as Record<string, unknown>[]) {

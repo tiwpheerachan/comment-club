@@ -14,3 +14,15 @@ export function sevColors(s: number): [string, string] {
   if (s >= 4) return ["#fdf3e3", "#b45309"];
   return ["#eef0f3", "#475569"];
 }
+
+/**
+ * ลิงก์ไปหน้าสินค้า Shopee (ส่วนรีวิว) เพื่อตรวจสอบคอมเมนต์/คำตอบ
+ * รูปแบบ canonical: https://shopee.co.th/product/{shop_id}/{item_id}
+ * คืน null ถ้าไม่มี shop_id หรือ item_id (สร้างลิงก์ไม่ได้)
+ */
+export function shopeeProductUrl(shopId?: string | number | null, itemId?: string | number | null): string | null {
+  const s = shopId == null ? "" : String(shopId).trim();
+  const i = itemId == null ? "" : String(itemId).trim();
+  if (!s || !i || s === "0" || !/^\d+$/.test(s) || !/^\d+$/.test(i)) return null;
+  return `https://shopee.co.th/product/${s}/${i}`;
+}

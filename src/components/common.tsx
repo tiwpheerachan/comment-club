@@ -1,4 +1,17 @@
-import { dirBg, dirColor, fmtScore } from "@/lib/ui";
+import { dirBg, dirColor, fmtScore, shopeeProductUrl } from "@/lib/ui";
+import { ExternalLink } from "./icons";
+
+/** ลิงก์ไปหน้าสินค้า Shopee (ส่วนรีวิว) — ซ่อนเองถ้าสร้างลิงก์ไม่ได้ */
+export function ShopeeLink({ shopId, itemId, className = "" }: { shopId?: string | number | null; itemId?: string | number | null; className?: string }) {
+  const url = shopeeProductUrl(shopId, itemId);
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" title="เปิดหน้าสินค้าบน Shopee เพื่อตรวจสอบ"
+      className={`inline-flex items-center gap-1 text-[12px] font-medium text-shopee hover:underline ${className}`}>
+      <ExternalLink className="w-3.5 h-3.5" /> ดูบน Shopee
+    </a>
+  );
+}
 
 export function ScorePill({ score, label }: { score: number; label?: string }) {
   return (

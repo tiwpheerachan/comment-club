@@ -33,6 +33,7 @@ export interface BrandStat {
 export interface CommentRow {
   comment_id: string;
   brand: string | null;
+  shop_id: string | null;
   product_name: string | null;
   rating: number | null;
   comment_text: string | null;
@@ -69,7 +70,7 @@ export interface CommentFilters {
 }
 
 const COMMENT_COLS =
-  "comment_id, brand, product_name, rating, comment_text, username, created_at, sentiment, category, severity, summary, suggested_action, urgent, status, assignee, note, images";
+  "comment_id, brand, shop_id, product_name, rating, comment_text, username, created_at, sentiment, category, severity, summary, suggested_action, urgent, status, assignee, note, images";
 
 export async function getProductStats(opts: { limit?: number; worstFirst?: boolean } = {}) {
   const sb = getServiceClient();

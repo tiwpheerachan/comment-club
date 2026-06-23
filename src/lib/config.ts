@@ -18,6 +18,7 @@ export const BIGQUERY = {
 export const COLUMNS: Record<string, string | null> = {
   comment_id: "comment_id",
   brand: "brand_id",
+  shop_id: "shop_id", // ใช้สร้างลิงก์ไปหน้าสินค้า Shopee + lookup token ตอนตอบกลับ
   shop_name: null, // ไม่มีชื่อร้านในตาราง (มีแต่ shop_id)
   product_name: "item_id", // ไม่มีชื่อสินค้า → ใช้ item_id เป็นตัวแทน
   product_id: "item_id",
@@ -97,6 +98,6 @@ export const PIPELINE = {
 export const PIPELINE_SECRET = process.env.PIPELINE_SECRET || "";
 
 export const STD_FIELDS = [
-  "comment_id", "brand", "shop_name", "product_name", "product_id",
+  "comment_id", "brand", "shop_id", "shop_name", "product_name", "product_id",
   "rating", "comment_text", "username", "created_at", "order_id",
 ] as const;

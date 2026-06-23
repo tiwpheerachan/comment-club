@@ -77,6 +77,7 @@ export function aggregate(results: AnalyzedComment[], windowDays: number): Summa
       urgent.push({
         comment_id: r.comment_id,
         brand: r.brand,
+        shop_id: r.shop_id,
         product_name: r.product_name,
         rating: r.rating,
         username: r.username,

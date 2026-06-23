@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import type { CommentRow } from "@/lib/db";
 import { sevColors } from "@/lib/ui";
-import { SentChip } from "./common";
+import { SentChip, ShopeeLink } from "./common";
 import { Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 
@@ -94,6 +94,7 @@ export default function ProductReviews({ comments }: { comments: CommentRow[] })
               <div className="text-[14px] text-ink leading-relaxed">{r.comment_text}</div>
               <ImageThumbs images={r.images} size={56} max={8} />
               {r.suggested_action && <div className="text-[12.5px] text-shopee mt-1.5">→ {r.suggested_action}</div>}
+              <div className="mt-1.5"><ShopeeLink shopId={r.shop_id} itemId={r.product_name} /></div>
             </div>
           );
         })}

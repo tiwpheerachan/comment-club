@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CommentRow } from "@/lib/db";
 import { sevColors } from "@/lib/ui";
-import { SentChip } from "./common";
+import { SentChip, ShopeeLink } from "./common";
 import { Download, Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
 
@@ -208,6 +208,7 @@ export default function ExploreClient({
                       {r.suggested_action && (
                         <div className="text-[12px] text-shopee mt-1">→ {r.suggested_action}</div>
                       )}
+                      <div className="mt-1"><ShopeeLink shopId={r.shop_id} itemId={r.product_name} /></div>
                     </td>
                     <td className="p-3">
                       <span className="chip">{r.category || "-"}</span>

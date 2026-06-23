@@ -6,6 +6,7 @@ export type Sentiment = "positive" | "neutral" | "negative";
 export interface RawComment {
   comment_id: string;
   brand: string | null;
+  shop_id: string | null;
   shop_name: string | null;
   product_name: string | null;
   product_id: string | null;
@@ -45,6 +46,7 @@ export interface BrandSummary {
 export interface UrgentItem {
   comment_id: string | null;
   brand: string | null;
+  shop_id: string | null;
   product_name: string | null;
   rating: number | null;
   username: string | null;

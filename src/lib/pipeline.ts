@@ -36,6 +36,7 @@ function toRow(c: AnalyzedComment) {
   return {
     comment_id: c.comment_id,
     brand: c.brand,
+    shop_id: c.shop_id,
     shop_name: c.shop_name,
     product_name: c.product_name,
     product_id: c.product_id,
@@ -69,7 +70,7 @@ async function loadWindow(sb: SupabaseClient, windowDays: number): Promise<Analy
     const { data, error } = await sb
       .from("comments")
       .select(
-        "comment_id, brand, shop_name, product_name, product_id, rating, comment_text, username, created_at, order_id, images, sentiment, category, severity, summary, suggested_action, urgent, analyzed_by, model"
+        "comment_id, brand, shop_id, shop_name, product_name, product_id, rating, comment_text, username, created_at, order_id, images, sentiment, category, severity, summary, suggested_action, urgent, analyzed_by, model"
       )
       .gte("created_at", since.toISOString())
       .order("created_at", { ascending: false })
