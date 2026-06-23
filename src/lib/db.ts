@@ -321,6 +321,89 @@ export async function getRetention(): Promise<RetentionBundle> {
 }
 
 /** ค่าที่ไม่ซ้ำสำหรับเติม dropdown ฟิลเตอร์ (brand/category) */
+// ---- การตอบกลับของทีม (ใครตอบอะไรไปบ้าง) ----
+export interface ReplyRecord {
+  comment_id: string;
+  reply_text: string | null;
+  status: string | null;
+  replied_by: string | null;
+  platform_response: string | null;
+  updated_at: string | null;
+  // เสริมจาก comments
+  brand: string | null;
+  product_name: string | null;
+  shop_id: string | null;
+  comment_text: string | null;
+  sentiment: string | null;
+  rating: number | null;
+}
+
+export interface ReplyAgentStat { name: string; sent: number; failed: number; draft: number; total: number; last_at: string | null }
+
+/** รายการตอบกลับทั้งหมด (กรองตามแอดมิน/สถานะ/ค้นหา) + ข้อมูลคอมเมนต์ */
+export async function getReplies(opts: { repliedBy?: string; status?: string; q?: string; limit?: number } = {}): Promise<ReplyRecord[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  let q = sb.from("comment_replies").select("comment_id, reply_text, status, replied_by, platform_response, updated_at").order("updated_at", { ascending: false }).limit(opts.limit ?? 500);
+  if (opts.repliedBy) q = q.eq("replied_by", opts.repliedBy);
+  if (opts.status) q = q.eq("status", opts.status);
+  const { data, error } = await q;
+  if (error || !data) return [];
+
+  // ดึงข้อมูลคอมเมนต์ของรายการเหล่านี้
+  const ids = data.map((r) => String(r.comment_id));
+  const info = new Map<string, { brand: string | null; product_name: string | null; shop_id: string | null; comment_text: string | null; sentiment: string | null; rating: number | null }>();
+  for (let i = 0; i < ids.length; i += 300) {
+    const { data: cs } = await sb.from("comments").select("comment_id, brand, product_name, shop_id, comment_text, sentiment, rating").in("comment_id", ids.slice(i, i + 300));
+    for (const c of cs ?? []) info.set(String(c.comment_id), { brand: c.brand as string, product_name: c.product_name as string, shop_id: c.shop_id as string, comment_text: c.comment_text as string, sentiment: c.sentiment as string, rating: c.rating as number });
+  }
+
+  let rows: ReplyRecord[] = data.map((r) => {
+    const c = info.get(String(r.comment_id));
+    return {
+      comment_id: String(r.comment_id), reply_text: r.reply_text as string, status: r.status as string, replied_by: r.replied_by as string,
+      platform_response: r.platform_response as string, updated_at: r.updated_at as string,
+      brand: c?.brand ?? null, product_name: c?.product_name ?? null, shop_id: c?.shop_id ?? null,
+      comment_text: c?.comment_text ?? null, sentiment: c?.sentiment ?? null, rating: c?.rating ?? null,
+    };
+  });
+  if (opts.q) {
+    const t = opts.q.toLowerCase();
+    rows = rows.filter((r) => (r.reply_text || "").toLowerCase().includes(t) || (r.comment_text || "").toLowerCase().includes(t));
+  }
+  return rows;
+}
+
+/** สรุปการตอบกลับรายแอดมิน (ใครตอบกี่ครั้ง สำเร็จ/ล้มเหลว) */
+export async function getReplyAgentStats(): Promise<ReplyAgentStat[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const agg = new Map<string, ReplyAgentStat>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("comment_replies").select("replied_by, status, updated_at").range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) {
+      const name = (r.replied_by as string) || "ไม่ระบุ";
+      const a = agg.get(name) ?? { name, sent: 0, failed: 0, draft: 0, total: 0, last_at: null };
+      a.total++;
+      if (r.status === "sent") a.sent++;
+      else if (r.status === "failed") a.failed++;
+      else a.draft++;
+      const at = r.updated_at as string;
+      if (at && (!a.last_at || at > a.last_at)) a.last_at = at;
+      agg.set(name, a);
+    }
+    if (data.length < 1000) break;
+  }
+  return [...agg.values()].sort((a, b) => b.total - a.total);
+}
+
+/** รายชื่อแอดมินที่เคยตอบกลับ (สำหรับตัวกรอง) */
+export async function getReplyAgents(): Promise<string[]> {
+  const stats = await getReplyAgentStats();
+  return stats.map((s) => s.name).filter((n) => n !== "ไม่ระบุ");
+}
+
 // ---- ยอดขายรายวัน (Forecasting) ----
 export interface GmvDayRow { date: string; gmv: number; units: number; net_sales: number | null }
 

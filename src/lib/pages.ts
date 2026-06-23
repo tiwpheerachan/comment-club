@@ -8,6 +8,7 @@ export const PAGES: PageDef[] = [
   { key: "products", label: "รายสินค้า", path: "/products" },
   { key: "explore", label: "สำรวจคอมเมนต์", path: "/explore" },
   { key: "triage", label: "ศูนย์จัดการด่วน", path: "/triage" },
+  { key: "replies", label: "การตอบกลับของทีม", path: "/replies" },
   { key: "retention", label: "Retention ลูกค้า", path: "/retention" },
   { key: "forecast", label: "พยากรณ์ยอดขาย", path: "/forecast" },
   { key: "trends", label: "เทรนด์ / รายงาน", path: "/trends" },
