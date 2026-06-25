@@ -1,10 +1,11 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import type { CommentRow } from "@/lib/db";
-import { sevColors } from "@/lib/ui";
+import { fmtDateTime, fmtRelative, sevColors } from "@/lib/ui";
 import { SellerReplyBadge, SentChip, ShopeeLink } from "./common";
 import { Download, Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
+import ProductThumb from "./ProductThumb";
 import ReplyBox from "./ReplyBox";
 
 interface Filters {
@@ -190,12 +191,17 @@ export default function ExploreClient({
                 const [bg, fg] = sevColors(r.severity ?? 0);
                 return (
                   <tr key={r.comment_id} className="border-b border-[#eef0f3] last:border-0 align-top">
-                    <td className="p-3 text-muted text-xs whitespace-nowrap">
-                      {r.created_at ? new Date(r.created_at).toLocaleDateString("th-TH") : "-"}
+                    <td className="p-3 text-muted text-xs whitespace-nowrap" title={fmtRelative(r.created_at)}>
+                      {fmtDateTime(r.created_at)}
                     </td>
                     <td className="p-3">
-                      {r.brand || "-"}
-                      <div className="text-muted text-[11.5px]">{r.product_name || ""}</div>
+                      <div className="flex items-center gap-2 min-w-0 max-w-[260px]">
+                        <ProductThumb src={r.product_image} size={38} />
+                        <div className="min-w-0">
+                          <div className="text-[12.5px] font-medium text-ink truncate" title={r.product_item_name || undefined}>{r.product_item_name || r.brand || "-"}</div>
+                          <div className="text-muted text-[11px] truncate">{r.brand ? `${r.brand} • ` : ""}{r.product_name || ""}</div>
+                        </div>
+                      </div>
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {r.rating ?? "-"} <Star className="w-3 h-3 inline text-neu" />

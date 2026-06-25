@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import type { ReplyAgentStat, ReplyRecord } from "@/lib/db";
 import { SentChip, ShopeeLink } from "./common";
 import { Chat, Check, Search } from "./icons";
+import ProductThumb from "./ProductThumb";
 
 const fmtDate = (s: string | null) =>
   s ? new Date(s).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-";
@@ -89,15 +90,26 @@ export default function RepliesClient({ replies, stats }: { replies: ReplyRecord
         {rows.length === 0 && <div className="card card-pad text-center text-muted text-sm py-8">ไม่พบรายการตามเงื่อนไข</div>}
         {rows.map((r) => (
           <div key={r.comment_id} className="card card-pad">
-            <div className="flex items-center gap-2 flex-wrap mb-1.5 text-[12px]">
+            <div className="flex items-center gap-2 flex-wrap mb-2 text-[12px]">
               <span className="font-semibold text-ink">{r.replied_by || "ไม่ระบุ"}</span>
               <StatusBadge status={r.status} />
-              {r.brand && <span className="chip !mb-0 !mr-0">{r.brand}</span>}
               {r.sentiment && <SentChip s={r.sentiment} />}
               {r.rating != null && <span className="text-muted">{r.rating}★</span>}
-              <span className="text-muted ml-auto">{fmtDate(r.updated_at)}</span>
+              <span className="text-muted ml-auto whitespace-nowrap">ตอบเมื่อ {fmtDate(r.updated_at)}</span>
             </div>
-            {r.comment_text && <div className="text-[12.5px] text-muted leading-snug border-l-2 border-line pl-2.5 mb-2">ลูกค้า: “{r.comment_text}”</div>}
+            <div className="flex items-center gap-2 mb-2 min-w-0">
+              <ProductThumb src={r.product_image} size={36} />
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold text-ink truncate" title={r.product_item_name || undefined}>{r.product_item_name || r.brand || "-"}</div>
+                <div className="text-[11px] text-muted truncate">{r.brand ? `${r.brand} • ` : ""}{r.product_name || ""}</div>
+              </div>
+            </div>
+            {r.comment_text && (
+              <div className="text-[12.5px] text-muted leading-snug border-l-2 border-line pl-2.5 mb-2">
+                ลูกค้า: “{r.comment_text}”
+                {r.created_at && <span className="block text-[11px] text-muted/80 mt-0.5">🕒 คอมเมนต์เมื่อ {fmtDate(r.created_at)}</span>}
+              </div>
+            )}
             <div className="text-[13.5px] text-ink leading-relaxed flex items-start gap-1.5">
               <Chat className="w-4 h-4 text-shopee flex-none mt-0.5" />
               <span>{r.reply_text}</span>

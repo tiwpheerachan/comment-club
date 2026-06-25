@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { Summary, TrendPoint, UrgentItem } from "@/lib/types";
-import { dirBg, dirColor, fmtScore, sevColors } from "@/lib/ui";
+import { dirBg, dirColor, fmtDateTime, fmtRelative, fmtScore, sevColors } from "@/lib/ui";
 import { Alert, ArrowRight, Bars, Box, Chat, Check, Compass, Pie, Refresh, Scale, Star, Trend, Wrench } from "./icons";
 import { SellerReplyBadge, SentimentBar, ShopeeLink } from "./common";
 import ImageThumbs from "./ImageThumbs";
@@ -153,6 +153,7 @@ export default function Dashboard({ summary, trend }: { summary: Summary; trend:
  <span className="inline-flex items-center justify-center min-w-[26px] h-6 font-extrabold rounded text-[12px] flex-none" style={{ background: bg, color: fg }}>{u.severity}</span>
  <b className="text-[12.5px]">{u.brand || "-"}</b>
  <span className="text-muted">{u.rating ?? "-"}★</span>
+ <span className="text-muted whitespace-nowrap" title={fmtDateTime(u.created_at)}>🕒 {fmtRelative(u.created_at)}</span>
  <span className="chip !mb-0 !mr-0 !py-0.5 ml-auto">{u.category || "-"}</span>
  </div>
  <div className="text-[12.5px] text-ink leading-snug line-clamp-3">“{u.comment_text}”</div>

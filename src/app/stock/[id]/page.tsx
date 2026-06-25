@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader";
 import StockDetailClient from "@/components/StockDetailClient";
 import { NoAccess } from "@/components/common";
 import { getCurrentProfile } from "@/lib/auth";
-import { getEnvDaily, getProductCatalogOne, getProductDemand } from "@/lib/db";
+import { getEnvDaily, getProductCatalogOne, getProductDemand, getProductForecastMl, getProductSentimentDaily, getProductStockDaily } from "@/lib/db";
 import { canAccess } from "@/lib/pages";
 import type { EnvMonthly } from "@/lib/product-analytics";
 
@@ -13,7 +13,9 @@ export default async function StockDetailPage({ params }: { params: Promise<{ id
   if (!canAccess(await getCurrentProfile(), "stock")) return <NoAccess />;
   const { id } = await params;
 
-  const [product, demand, env] = await Promise.all([getProductCatalogOne(id), getProductDemand(id), getEnvDaily()]);
+  const [product, demand, env, stockHistory, sentiment, ml] = await Promise.all([
+    getProductCatalogOne(id), getProductDemand(id), getEnvDaily(), getProductStockDaily(id), getProductSentimentDaily(id), getProductForecastMl(id),
+  ]);
 
   if (!product) {
     return (
@@ -40,7 +42,7 @@ export default async function StockDetailPage({ params }: { params: Promise<{ id
   return (
     <>
       <PageHeader title={product.name || product.product_id} subtitle={`${product.brand || "-"} • รหัส ${product.product_id}`} />
-      <StockDetailClient product={product} demand={demand} envMonthly={envMonthly} envDaily={env} />
+      <StockDetailClient product={product} demand={demand} envMonthly={envMonthly} envDaily={env} stockHistory={stockHistory} sentiment={sentiment} ml={ml} />
     </>
   );
 }

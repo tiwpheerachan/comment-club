@@ -247,7 +247,15 @@ async function syncProductForecast(sb: SupabaseClient): Promise<void> {
     const { error } = await sb.from("product_catalog").upsert(rows.slice(i, i + 500), { onConflict: "product_id" });
     if (error) throw new Error(`upsert product_catalog: ${error.message}`);
   }
-  console.log(`[pipeline] sync product forecast: ${rows.length} สินค้า, ${dd.length} แถวยอดขาย, สต๊อก ${stock.length}`);
+
+  // 5) บันทึก snapshot สต๊อกของ"วันนี้" → product_stock_daily (สะสมเป็นประวัติไว้วิเคราะห์วันของหมด)
+  const today = dayStr(0);
+  const snap = stock.map((s) => ({ product_id: s.product_id, date: today, stock: s.stock, reserved: s.reserved, updated_at: now }));
+  for (let i = 0; i < snap.length; i += 500) {
+    const { error } = await sb.from("product_stock_daily").upsert(snap.slice(i, i + 500), { onConflict: "product_id,date" });
+    if (error) throw new Error(`upsert product_stock_daily: ${error.message}`);
+  }
+  console.log(`[pipeline] sync product forecast: ${rows.length} สินค้า, ${dd.length} แถวยอดขาย, สต๊อก ${stock.length} (snapshot ${snap.length})`);
 }
 
 /** บังคับ sync ปัจจัยแวดล้อม (npm run env) */

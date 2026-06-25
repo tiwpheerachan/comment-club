@@ -1,27 +1,35 @@
 // ============================================================
 //  เครื่องมือพยากรณ์ยอดขาย (Sales Forecasting)
 //  เทรนด์เชิงเส้น × ฤดูกาลรายสัปดาห์ + ตรวจจับวันแคมเปญ
+//  + เรียนรู้ "ผลของแคมเปญ/วันหยุด" แยกตามประเภทจากยอดขายจริง แล้วฉีดกลับเข้าพยากรณ์
 //  ไม่ใช้ไลบรารี ML — คำนวณทั้งหมดในตัว (deterministic, อธิบายได้)
 // ============================================================
+
+import { eventForDate, TIER_LABEL, type EventTier } from "./events";
 
 export interface DayPoint { date: string; gmv: number; units: number; net_sales?: number | null }
 
 export interface ForecastPoint {
   date: string;
   actual: number | null;   // ยอดจริง (null = อนาคต)
-  forecast: number;        // ค่าพยากรณ์
+  baseline: number;        // ยอดปกติ (เทรนด์×ฤดูกาล ก่อนใส่ผลแคมเปญ)
+  forecast: number;        // ค่าพยากรณ์ (รวมผลแคมเปญ/วันหยุดที่เรียนรู้แล้ว)
   lower: number;           // ขอบล่าง (ช่วงความเชื่อมั่น)
   upper: number;           // ขอบบน
-  isCampaign: boolean;     // เป็นวันแคมเปญที่ตรวจพบหรือไม่
+  isCampaign: boolean;     // เป็นวันแคมเปญ/วันสำคัญหรือไม่
+  eventName: string | null;// ชื่อเหตุการณ์ (เช่น 11.11, เงินเดือนออก)
   isFuture: boolean;
 }
+
+export interface EventTierUplift { tier: EventTier; label: string; upliftPct: number; n: number }
 
 export interface ForecastResult {
   points: ForecastPoint[];
   // สรุป
   trendPerDay: number;        // อัตราเติบโตต่อวัน (บาท)
   weeklySeasonality: number[];// ตัวคูณ 7 วัน (อา..ส)
-  campaignDays: string[];     // วันแคมเปญที่ตรวจพบ
+  campaignDays: string[];     // วันแคมเปญที่ตรวจพบ (spike)
+  eventUplift: EventTierUplift[]; // ผลของแต่ละประเภทเหตุการณ์ที่เรียนรู้จากยอดขายจริง
   // ตัวเลขสำคัญ
   last30: number;             // ยอดรวมจริง 30 วันล่าสุด
   prev30: number;             // ยอดรวมจริง 30 วันก่อนหน้า
@@ -118,28 +126,57 @@ export function forecast(raw: DayPoint[], horizon = 30, dropLast = true): Foreca
   }
   const mape = errs.length ? Math.min(100, mean(errs) * 100) : null;
 
-  // --- 5) ช่วงความเชื่อมั่น: ±1.5×ส่วนเบี่ยงเบนของ residual ปกติ (เฉพาะช่วงที่เทรนด์ครอบคลุม) ---
+  // --- 5) เรียนรู้ "ผลของแต่ละประเภทเหตุการณ์" จากยอดขายจริง ---
+  //     สำหรับวันที่ตรงปฏิทิน (แคมเปญ/วันหยุด) → อัตราส่วน actual/baseline แยกตามประเภท
+  //     เก็บเฉพาะที่พุ่งจริง (median ≥1.1) และมีตัวอย่างพอ → ฉีดกลับเข้าพยากรณ์อนาคต
+  const tierRatios: Partial<Record<EventTier, number[]>> = {};
+  for (let i = 0; i < n; i++) {
+    const ev = eventForDate(series[i].date);
+    if (!ev || y[i] <= 0) continue;
+    const b = baseAt(i, new Date(toUTC(series[i].date)).getUTCDay());
+    if (b > 0) (tierRatios[ev.tier] ??= []).push(y[i] / b);
+  }
+  const tierMult: Partial<Record<EventTier, number>> = {};
+  const eventUplift: EventTierUplift[] = [];
+  for (const t of Object.keys(tierRatios) as EventTier[]) {
+    const arr = tierRatios[t]!;
+    const m = median(arr);
+    eventUplift.push({ tier: t, label: TIER_LABEL[t], upliftPct: +((m - 1) * 100).toFixed(0), n: arr.length });
+    if (arr.length >= 2 && m >= 1.1) tierMult[t] = m;  // ฉีดเฉพาะที่ผลชัด
+  }
+  eventUplift.sort((a, b) => b.upliftPct - a.upliftPct);
+  // ตัวคูณเหตุการณ์ของวันหนึ่ง (เรียนรู้แล้ว) — ถ้าไม่ชัด = 1
+  const eventInfo = (date: string) => eventForDate(date);
+  const eventMult = (date: string) => { const ev = eventInfo(date); return ev && tierMult[ev.tier] ? tierMult[ev.tier]! : 1; };
+
+  // --- 6) ช่วงความเชื่อมั่น: ±1.5×ส่วนเบี่ยงเบนของ residual ปกติ (เฉพาะช่วงที่เทรนด์ครอบคลุม) ---
   const resid: number[] = [];
   for (let i = trStart; i < n; i++) { if (!isCamp[i] && y[i] > 0) resid.push(y[i] - baseAt(i, new Date(toUTC(series[i].date)).getUTCDay())); }
   const rstd = Math.sqrt(mean(resid.map((r) => r * r)) || 0);
   const band = 1.5 * rstd;
 
-  // --- 6) ประกอบจุด actual + forecast ---
+  // --- 7) ประกอบจุด actual + forecast (ฉีดผลแคมเปญ/วันหยุดที่เรียนรู้แล้ว) ---
   const points: ForecastPoint[] = series.map((p, i) => {
-    const f = baseAt(i, new Date(toUTC(p.date)).getUTCDay());
-    return { date: p.date, actual: p.gmv, forecast: Math.round(f), lower: Math.round(Math.max(0, f - band)), upper: Math.round(f + band), isCampaign: isCamp[i], isFuture: false };
+    const base = baseAt(i, new Date(toUTC(p.date)).getUTCDay());
+    const ev = eventInfo(p.date);
+    const f = base * eventMult(p.date);
+    return { date: p.date, actual: p.gmv, baseline: Math.round(base), forecast: Math.round(f), lower: Math.round(Math.max(0, f - band)), upper: Math.round(f + band), isCampaign: isCamp[i], eventName: ev?.name ?? null, isFuture: false };
   });
-  // future
+  // future — วันแคมเปญ/วันหยุดในอนาคตจะ "พุ่ง" ตามที่เรียนรู้จากประวัติ
   const lastMs = n ? toUTC(series[n - 1].date) : Date.now();
   for (let h = 1; h <= horizon; h++) {
     const i = n - 1 + h;
     const ms = lastMs + h * DAY_MS;
+    const date = fromUTC(ms);
     const dow = new Date(ms).getUTCDay();
-    const f = baseAt(i, dow);
-    points.push({ date: fromUTC(ms), actual: null, forecast: Math.round(f), lower: Math.round(Math.max(0, f - band)), upper: Math.round(f + band), isCampaign: false, isFuture: true });
+    const base = baseAt(i, dow);
+    const ev = eventInfo(date);
+    const mult = eventMult(date);
+    const f = base * mult;
+    points.push({ date, actual: null, baseline: Math.round(base), forecast: Math.round(f), lower: Math.round(Math.max(0, f - band)), upper: Math.round(f + band), isCampaign: mult > 1, eventName: ev?.name ?? null, isFuture: true });
   }
 
-  // --- 7) ตัวเลขสรุป ---
+  // --- 8) ตัวเลขสรุป ---
   const last30 = sum(y.slice(Math.max(0, n - 30)));
   const prev30 = sum(y.slice(Math.max(0, n - 60), Math.max(0, n - 30)));
   const momPct = prev30 > 0 ? ((last30 - prev30) / prev30) * 100 : 0;
@@ -169,6 +206,7 @@ export function forecast(raw: DayPoint[], horizon = 30, dropLast = true): Foreca
     trendPerDay: Math.round(slope),
     weeklySeasonality: weekly.map((w) => +w.toFixed(3)),
     campaignDays,
+    eventUplift,
     last30: Math.round(last30),
     prev30: Math.round(prev30),
     momPct: +momPct.toFixed(1),

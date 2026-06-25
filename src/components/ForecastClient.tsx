@@ -4,8 +4,10 @@ import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine,
   ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { campaignUplift } from "@/lib/campaign";
 import type { GmvDayRow } from "@/lib/db";
 import { DOW_LABELS, forecast, type ForecastResult } from "@/lib/forecast";
+import AiBrief from "./AiBrief";
 import { Alert, Forecast as FIcon, Info, Trend } from "./icons";
 
 const baht = (n: number) => "฿" + Math.round(n).toLocaleString("th-TH");
@@ -51,6 +53,8 @@ export default function ForecastClient({ initial, platforms, brands }: { initial
   }, [scope, initial]);
 
   const fc: ForecastResult = useMemo(() => forecast(rows, horizon, true), [rows, horizon]);
+  // พยากรณ์ยาว 120 วันสำหรับวิเคราะห์วันแคมเปญล่วงหน้า (ฉีด uplift ที่เรียนรู้แล้ว)
+  const campaign = useMemo(() => campaignUplift(forecast(rows, 120, true)), [rows]);
 
   // ข้อมูลสำหรับกราฟ (จำกัดช่วงเวลาแสดงผล + รวมอนาคต)
   const chartData = useMemo(() => {
@@ -177,7 +181,7 @@ export default function ForecastClient({ initial, platforms, brands }: { initial
             {fc.campaignDays.length === 0 && <div className="text-sm text-muted">ไม่พบวันแคมเปญในช่วงนี้</div>}
             {[...fc.campaignDays].reverse().slice(0, 24).map((d) => {
               const pt = fc.points.find((p) => p.date === d);
-              const lift = pt && pt.forecast > 0 ? Math.round(((pt.actual! - pt.forecast) / pt.forecast) * 100) : null;
+              const lift = pt && pt.baseline > 0 ? Math.round(((pt.actual! - pt.baseline) / pt.baseline) * 100) : null;
               return (
                 <div key={d} className="flex items-center justify-between text-[13px] border-b border-[#f1f3f5] pb-1.5">
                   <span className="text-ink font-medium">{d}</span>
@@ -192,8 +196,87 @@ export default function ForecastClient({ initial, platforms, brands }: { initial
         </div>
       </div>
 
+      {/* พยากรณ์วันแคมเปญล่วงหน้า */}
+      <CampaignPanel cu={campaign} />
+
+      {/* บทวิเคราะห์ AI */}
+      <AiBrief
+        kind="sales"
+        title={scopeLabel}
+        facts={{
+          ขอบเขต: scopeLabel,
+          ยอด30วันล่าสุด: fc.last30,
+          เทียบเดือนก่อนMoM: fc.momPct + "%",
+          เทียบปีก่อนYoY: fc.yoyPct == null ? null : fc.yoyPct + "%",
+          แนวโน้มต่อวันบาท: fc.trendPerDay,
+          คาดปิดเดือนนี้: fc.monthEndProjection,
+          พยากรณ์ถัดไปบาท: fc.forecastNext30,
+          ความแม่นMAPE: fc.mape,
+          วันขายดีสุด: bestDow.dow,
+          จำนวนวันแคมเปญที่พบ: fc.campaignDays.length,
+          ผลแคมเปญที่เรียนรู้: campaign.tiers.filter((t) => Math.abs(t.upliftPct) >= 5).map((t) => `${t.label} ${t.upliftPct >= 0 ? "+" : ""}${t.upliftPct}% (${t.n}ครั้ง)`),
+          เหตุการณ์ถัดไป: campaign.upcoming[0] ? { ชื่อ: campaign.upcoming[0].name, ประเภท: campaign.upcoming[0].tierLabel, อีกกี่วัน: campaign.upcoming[0].daysAway, คาดยอด: campaign.upcoming[0].projected, สูงกว่าปกติเปอร์เซ็นต์: campaign.upcoming[0].upliftPct } : null,
+        }}
+      />
+
       {/* ข้อสังเกตอัตโนมัติ */}
       <Insights fc={fc} accuracy={accuracy} scopeLabel={scopeLabel} bestDow={bestDow.dow} horizon={horizon} />
+    </div>
+  );
+}
+
+function CampaignPanel({ cu }: { cu: ReturnType<typeof campaignUplift> }) {
+  const TIER_COLOR: Record<string, string> = { mega: "#dc2626", major: "#ea580c", cny: "#dc2626", songkran: "#0ea5e9", newyear: "#8b5cf6", double: "#f59e0b", payday: "#16a34a", midmonth: "#6366f1" };
+  const list = cu.upcoming.slice(0, 10);
+  const learnedTiers = cu.tiers.filter((t) => Math.abs(t.upliftPct) >= 5);
+  return (
+    <div className="card card-pad">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <h3 className="text-[15px] font-bold text-ink flex items-center gap-2"><Alert className="w-4 h-4 text-orange-500" /> พยากรณ์วันแคมเปญ/วันสำคัญล่วงหน้า</h3>
+        <span className="text-[12px] text-muted">เรียนรู้จากยอดขายจริง • ตรวจพบ {cu.detectedCount} วันแคมเปญในประวัติ</span>
+      </div>
+      <p className="text-[12px] text-muted mb-3">{cu.note}</p>
+
+      {/* ผล uplift ที่เรียนรู้ต่อประเภท */}
+      {learnedTiers.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {learnedTiers.map((t) => (
+            <span key={t.tier} className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-line px-2.5 py-1 text-[12px]">
+              <span className="inline-block w-2 h-2 rounded-full" style={{ background: TIER_COLOR[t.tier] || "#94a3b8" }} />
+              <b className="text-ink">{t.label}</b>
+              <span className={t.upliftPct >= 0 ? "text-orange-600 font-semibold" : "text-muted"}>{t.upliftPct >= 0 ? "+" : ""}{t.upliftPct}%</span>
+              <span className="text-muted text-[10.5px]">({t.n}ครั้ง)</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {cu.prepNote && (
+        <div className="flex items-start gap-2 text-[13.5px] text-orange-700 bg-orange-50 rounded-xl px-3.5 py-2.5 mb-3">
+          <FIcon className="w-4 h-4 flex-none mt-0.5" /><span>{cu.prepNote}</span>
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <div className="text-sm text-muted">ไม่พบวันแคมเปญ/วันสำคัญในช่วง 120 วันข้างหน้า</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 max-[760px]:grid-cols-1">
+          {list.map((e) => (
+            <div key={e.date} className="flex items-center justify-between text-[13px] border-b border-[#f1f3f5] pb-1.5">
+              <span className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full" style={{ background: TIER_COLOR[e.tier] || "#94a3b8" }} />
+                <span className="text-ink font-semibold">{e.name}</span>
+                <span className="text-[11px] text-muted">{e.tierLabel} • อีก {e.daysAway} วัน</span>
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="text-ink font-medium">{baht(e.projected)}</span>
+                {e.upliftPct > 0 ? <span className="text-orange-600 font-semibold w-20 text-right">+{bahtShort(e.extraGmv)}</span> : <span className="text-muted text-[11px] w-20 text-right">ปกติ</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] text-muted mt-3">ยอดคาด = ยอดปกติของวันนั้น × ผล uplift ที่ <b>เรียนรู้จากยอดขายจริง</b>ของแต่ละประเภท (ไม่เดาตายตัว) • ปฏิทินรวมวันเลขเบิ้ล, เงินเดือนออก, สงกรานต์, ตรุษจีน, ปีใหม่</p>
     </div>
   );
 }

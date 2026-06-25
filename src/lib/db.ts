@@ -53,6 +53,9 @@ export interface CommentRow {
   seller_reply_at: string | null;
   seller_reply_hidden: boolean | null;
   images: string[] | null;
+  // เสริมจากตาราง products (join ด้วย product_name = item_id)
+  product_item_name: string | null;   // ชื่อสินค้าจริง (อ่านได้)
+  product_image: string | null;       // รูปสินค้า (thumbnail/หลัก)
 }
 
 export interface CommentFilters {
@@ -173,6 +176,18 @@ export async function getCategoryStats() {
   return (data ?? []) as { category: string; total: number }[];
 }
 
+/** ดึงชื่อสินค้าจริง + รูป จากตาราง products ตาม item_id (= comments.product_name) */
+async function productMetaMap(sb: ReturnType<typeof getServiceClient>, itemIds: (string | null)[]): Promise<Map<string, { name: string | null; img: string | null }>> {
+  const map = new Map<string, { name: string | null; img: string | null }>();
+  if (!sb) return map;
+  const ids = [...new Set(itemIds.filter(Boolean) as string[])];
+  for (let i = 0; i < ids.length; i += 300) {
+    const { data } = await sb.from("products").select("item_id, item_name, thumbnail_url, image_url").in("item_id", ids.slice(i, i + 300));
+    for (const p of data ?? []) map.set(String(p.item_id), { name: (p.item_name as string) ?? null, img: ((p.thumbnail_url as string) || (p.image_url as string)) || null });
+  }
+  return map;
+}
+
 export async function listComments(f: CommentFilters): Promise<{ rows: CommentRow[]; total: number }> {
   const sb = getServiceClient();
   if (!sb) return { rows: [], total: 0 };
@@ -216,7 +231,10 @@ export async function listComments(f: CommentFilters): Promise<{ rows: CommentRo
 
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
-  return { rows: (data ?? []) as CommentRow[], total: count ?? 0 };
+  const base = (data ?? []) as CommentRow[];
+  const meta = await productMetaMap(sb, base.map((r) => r.product_name));
+  const rows = base.map((r) => { const m = r.product_name ? meta.get(r.product_name) : null; return { ...r, product_item_name: m?.name ?? null, product_image: m?.img ?? null }; });
+  return { rows, total: count ?? 0 };
 }
 
 export async function updateTriage(
@@ -337,6 +355,9 @@ export interface ReplyRecord {
   comment_text: string | null;
   sentiment: string | null;
   rating: number | null;
+  created_at: string | null;        // เวลาที่ลูกค้าคอมเมนต์
+  product_item_name: string | null;
+  product_image: string | null;
 }
 
 export interface ReplyAgentStat { name: string; sent: number; failed: number; draft: number; total: number; last_at: string | null }
@@ -353,19 +374,24 @@ export async function getReplies(opts: { repliedBy?: string; status?: string; q?
 
   // ดึงข้อมูลคอมเมนต์ของรายการเหล่านี้
   const ids = data.map((r) => String(r.comment_id));
-  const info = new Map<string, { brand: string | null; product_name: string | null; shop_id: string | null; comment_text: string | null; sentiment: string | null; rating: number | null }>();
+  const info = new Map<string, { brand: string | null; product_name: string | null; shop_id: string | null; comment_text: string | null; sentiment: string | null; rating: number | null; created_at: string | null }>();
   for (let i = 0; i < ids.length; i += 300) {
-    const { data: cs } = await sb.from("comments").select("comment_id, brand, product_name, shop_id, comment_text, sentiment, rating").in("comment_id", ids.slice(i, i + 300));
-    for (const c of cs ?? []) info.set(String(c.comment_id), { brand: c.brand as string, product_name: c.product_name as string, shop_id: c.shop_id as string, comment_text: c.comment_text as string, sentiment: c.sentiment as string, rating: c.rating as number });
+    const { data: cs } = await sb.from("comments").select("comment_id, brand, product_name, shop_id, comment_text, sentiment, rating, created_at").in("comment_id", ids.slice(i, i + 300));
+    for (const c of cs ?? []) info.set(String(c.comment_id), { brand: c.brand as string, product_name: c.product_name as string, shop_id: c.shop_id as string, comment_text: c.comment_text as string, sentiment: c.sentiment as string, rating: c.rating as number, created_at: (c.created_at as string) ?? null });
   }
 
+  // ชื่อสินค้าจริง + รูป
+  const meta = await productMetaMap(sb, [...info.values()].map((c) => c.product_name));
   let rows: ReplyRecord[] = data.map((r) => {
     const c = info.get(String(r.comment_id));
+    const m = c?.product_name ? meta.get(c.product_name) : null;
     return {
       comment_id: String(r.comment_id), reply_text: r.reply_text as string, status: r.status as string, replied_by: r.replied_by as string,
       platform_response: r.platform_response as string, updated_at: r.updated_at as string,
       brand: c?.brand ?? null, product_name: c?.product_name ?? null, shop_id: c?.shop_id ?? null,
       comment_text: c?.comment_text ?? null, sentiment: c?.sentiment ?? null, rating: c?.rating ?? null,
+      created_at: c?.created_at ?? null,
+      product_item_name: m?.name ?? null, product_image: m?.img ?? null,
     };
   });
   if (opts.q) {
@@ -452,6 +478,67 @@ export async function getProductDemand(productId: string): Promise<{ date: strin
     if (data.length < 1000) break;
   }
   return out;
+}
+
+/** ประวัติสต๊อกรายวันของสินค้า (ใช้ตรวจ "วันของหมด" / censored demand) */
+export async function getProductStockDaily(productId: string): Promise<{ date: string; stock: number | null; reserved: number | null }[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const out: { date: string; stock: number | null; reserved: number | null }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("product_stock_daily").select("date, stock, reserved").eq("product_id", productId).order("date", { ascending: true }).range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) out.push({ date: String(r.date), stock: r.stock == null ? null : Number(r.stock), reserved: r.reserved == null ? null : Number(r.reserved) });
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+export interface MlForecast {
+  meta: { model: string; wape: number | null; n_history: number | null; horizon: number | null; generated_at: string } | null;
+  points: { date: string; yhat: number; lower: number; upper: number }[];
+}
+/** ผลพยากรณ์จาก ML sidecar (Nixtla) — คืน null ถ้ายังไม่เคยรัน */
+export async function getProductForecastMl(productId: string): Promise<MlForecast> {
+  const sb = getServiceClient();
+  if (!sb) return { meta: null, points: [] };
+  const [{ data: meta }, { data: pts }] = await Promise.all([
+    sb.from("product_forecast_ml_meta").select("model, wape, n_history, horizon, generated_at").eq("product_id", productId).maybeSingle(),
+    sb.from("product_forecast_ml").select("ds, yhat, yhat_lower, yhat_upper").eq("product_id", productId).order("ds", { ascending: true }),
+  ]);
+  return {
+    meta: meta ? { model: String(meta.model), wape: meta.wape == null ? null : Number(meta.wape), n_history: meta.n_history == null ? null : Number(meta.n_history), horizon: meta.horizon == null ? null : Number(meta.horizon), generated_at: String(meta.generated_at) } : null,
+    points: (pts ?? []).map((r) => ({ date: String(r.ds), yhat: Number(r.yhat) || 0, lower: Number(r.yhat_lower) || 0, upper: Number(r.yhat_upper) || 0 })),
+  };
+}
+
+export interface SentimentDay { date: string; count: number; avgRating: number | null; pos: number; neg: number; neu: number; net: number }
+/** รวมรีวิว/คอมเมนต์รายวันของสินค้า → ใช้เป็นสัญญาณนำ (leading indicator) ของยอดขาย */
+export async function getProductSentimentDaily(productId: string): Promise<SentimentDay[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const byDay = new Map<string, { n: number; ratings: number[]; pos: number; neg: number; neu: number }>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("comments").select("created_at, rating, sentiment").eq("product_id", productId).order("created_at", { ascending: true }).range(from, from + 999);
+    if (error || !data?.length) break;
+    for (const r of data) {
+      if (!r.created_at) continue;
+      const date = String(r.created_at).slice(0, 10);
+      const b = byDay.get(date) ?? { n: 0, ratings: [], pos: 0, neg: 0, neu: 0 };
+      b.n++;
+      if (r.rating != null) b.ratings.push(Number(r.rating));
+      const s = (r.sentiment as string) || "";
+      if (s === "positive") b.pos++; else if (s === "negative") b.neg++; else b.neu++;
+      byDay.set(date, b);
+    }
+    if (data.length < 1000) break;
+  }
+  return [...byDay.entries()].sort().map(([date, b]) => ({
+    date, count: b.n,
+    avgRating: b.ratings.length ? +(b.ratings.reduce((s, x) => s + x, 0) / b.ratings.length).toFixed(2) : null,
+    pos: b.pos, neg: b.neg, neu: b.neu,
+    net: b.n ? +((b.pos - b.neg) / b.n).toFixed(3) : 0,
+  }));
 }
 
 export interface EnvDayRow { date: string; pm2_5: number | null; temp_mean: number | null; temp_max: number | null; precip: number | null }

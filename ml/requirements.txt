@@ -1,0 +1,7 @@
+# ML forecasting sidecar (Nixtla) — ติดตั้ง: pip install -r ml/requirements.txt
+statsforecast>=1.7.5
+mlforecast>=0.13.4
+lightgbm>=4.3.0
+pandas>=2.1.0
+numpy>=1.26.0
+supabase>=2.4.0

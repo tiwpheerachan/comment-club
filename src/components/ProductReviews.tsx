@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CommentRow } from "@/lib/db";
-import { sevColors } from "@/lib/ui";
+import { fmtDateTime, fmtRelative, sevColors } from "@/lib/ui";
 import { SellerReplyBadge, SentChip, ShopeeLink } from "./common";
 import { Search, Star } from "./icons";
 import ImageThumbs from "./ImageThumbs";
@@ -90,8 +90,8 @@ export default function ProductReviews({ comments }: { comments: CommentRow[] })
                     ด่วน {r.severity}
                   </span>
                 )}
-                <span className="text-muted ml-auto">
-                  {r.created_at ? new Date(r.created_at).toLocaleDateString("th-TH") : ""}
+                <span className="text-muted ml-auto whitespace-nowrap" title={fmtRelative(r.created_at)}>
+                  🕒 {fmtDateTime(r.created_at)}
                 </span>
               </div>
               <div className="text-[14px] text-ink leading-relaxed">{r.comment_text}</div>

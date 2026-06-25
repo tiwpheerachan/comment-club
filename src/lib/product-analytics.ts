@@ -205,38 +205,65 @@ export function forecastQuality(pairs: { actual: number; forecast: number }[]): 
   return { wape, mape, bias, rmse, n: p.length, grade };
 }
 
-// ---- OLS regression หลายตัวแปร (Gaussian elimination) ----
-function ols(X: number[][], y: number[]): { coef: number[]; r2: number } | null {
-  const n = X.length, k = X[0]?.length ?? 0;
-  if (n <= k) return null;
-  // A = X'X (k×k), b = X'y
-  const A = Array.from({ length: k }, () => new Array(k).fill(0));
-  const b = new Array(k).fill(0);
-  for (let i = 0; i < n; i++) for (let a = 0; a < k; a++) { b[a] += X[i][a] * y[i]; for (let c = 0; c < k; c++) A[a][c] += X[i][a] * X[i][c]; }
-  // แก้ระบบ Ax=b
+// ---- OLS regression หลายตัวแปร + นัยสำคัญ (มี (X'X)⁻¹ สำหรับ standard error) ----
+function invert(M: number[][]): number[][] | null {
+  const k = M.length;
+  const A = M.map((row, i) => [...row, ...Array.from({ length: k }, (_, j) => (i === j ? 1 : 0))]);
   for (let col = 0; col < k; col++) {
     let piv = col; for (let r = col + 1; r < k; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
     if (Math.abs(A[piv][col]) < 1e-9) return null;
-    [A[col], A[piv]] = [A[piv], A[col]]; [b[col], b[piv]] = [b[piv], b[col]];
-    for (let r = 0; r < k; r++) if (r !== col) { const f = A[r][col] / A[col][col]; for (let c = col; c < k; c++) A[r][c] -= f * A[col][c]; b[r] -= f * b[col]; }
+    [A[col], A[piv]] = [A[piv], A[col]];
+    const d = A[col][col]; for (let c = 0; c < 2 * k; c++) A[col][c] /= d;
+    for (let r = 0; r < k; r++) if (r !== col) { const f = A[r][col]; for (let c = 0; c < 2 * k; c++) A[r][c] -= f * A[col][c]; }
   }
-  const coef = b.map((v, i) => v / A[i][i]);
-  const yb = mean(y); let ssTot = 0, ssRes = 0;
-  for (let i = 0; i < n; i++) { const pred = X[i].reduce((s, x, j) => s + x * coef[j], 0); ssRes += (y[i] - pred) ** 2; ssTot += (y[i] - yb) ** 2; }
-  return { coef, r2: ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0 };
+  return A.map((row) => row.slice(k));
 }
 
+function olsFit(X: number[][], y: number[]): { coef: number[]; se: number[]; r2: number; adjR2: number } | null {
+  const n = X.length, k = X[0]?.length ?? 0;
+  if (n <= k + 1) return null;
+  const A = Array.from({ length: k }, () => new Array(k).fill(0));
+  const b = new Array(k).fill(0);
+  for (let i = 0; i < n; i++) for (let a = 0; a < k; a++) { b[a] += X[i][a] * y[i]; for (let c = 0; c < k; c++) A[a][c] += X[i][a] * X[i][c]; }
+  const inv = invert(A);
+  if (!inv) return null;
+  const coef = inv.map((row) => row.reduce((s, v, j) => s + v * b[j], 0));
+  const yb = mean(y); let ssTot = 0, ssRes = 0;
+  for (let i = 0; i < n; i++) { const pred = X[i].reduce((s, x, j) => s + x * coef[j], 0); ssRes += (y[i] - pred) ** 2; ssTot += (y[i] - yb) ** 2; }
+  const sigma2 = ssRes / (n - k);                         // ความแปรปรวนของ residual
+  const se = inv.map((row, j) => Math.sqrt(Math.max(0, sigma2 * row[j])));
+  const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+  const adjR2 = ssTot > 0 ? 1 - (1 - r2) * (n - 1) / (n - k) : 0; // ปรับตามจำนวนตัวแปร (กัน overfit)
+  return { coef, se, r2: +r2.toFixed(3), adjR2: +Math.max(0, adjR2).toFixed(3) };
+}
+
+export interface EnvTerm { factor: string; label: string; beta: number; t: number; significant: boolean; impact: string; direction: string }
 export interface EnvModel {
-  r2: number; n: number;
-  terms: { factor: string; label: string; beta: number; impact: string }[]; // beta = สัมประสิทธิ์มาตรฐาน
+  r2: number; adjR2: number; n: number;
+  categoryLabel: string;
+  weatherRelevant: boolean;          // ประเภทสินค้านี้ "ควร" ขึ้นกับอากาศไหม
+  terms: EnvTerm[];                  // เฉพาะปัจจัยอากาศที่พิจารณา (ตาม category)
+  significantDrivers: EnvTerm[];     // ปัจจัยที่ผ่านนัยสำคัญทางสถิติจริง (|t|≥2)
+  trendBeta: number; trendSignificant: boolean;
   summary: string;
 }
-/** Regression ยอดขายรายสัปดาห์ ~ เทรนด์ + PM2.5 + อุณหภูมิ + ฝน → วัดว่าปัจจัยไหนขับเคลื่อนจริง (คุมตัวแปรอื่น) */
-export function envRegression(daily: { date: string; units: number }[], envDaily: { date: string; pm2_5: number | null; temp_mean: number | null; precip: number | null }[]): EnvModel | null {
+
+/**
+ * Regression ยอดขายรายสัปดาห์ ~ เทรนด์ + (ปัจจัยอากาศที่ category อนุญาตเท่านั้น)
+ * - ใส่เฉพาะปัจจัยที่ "มีเหตุผลเชิงสาเหตุ" กับสินค้าประเภทนั้น (กัน correlation ลวง)
+ * - รายงานเฉพาะปัจจัยที่ผ่านนัยสำคัญทางสถิติ (|t| ≥ 2 ≈ p<0.05)
+ * @param allowedFactors ปัจจัยอากาศที่เกี่ยวข้องกับสินค้านี้ (จาก categorize)
+ */
+export function envRegression(
+  daily: { date: string; units: number }[],
+  envDaily: { date: string; pm2_5: number | null; temp_mean: number | null; precip: number | null }[],
+  allowedFactors: ("pm2_5" | "temp_mean" | "precip")[] = ["pm2_5", "temp_mean", "precip"],
+  categoryLabel = "ทั่วไป",
+): EnvModel | null {
   const dens = densifyDaily(daily);
-  if (dens.length < 56) return null; // ต้องมีอย่างน้อย ~8 สัปดาห์
+  if (dens.length < 56) return null;
+  const weatherRelevant = allowedFactors.length > 0;
   const envMap = new Map(envDaily.map((e) => [e.date, e]));
-  // รวมเป็นรายสัปดาห์
   const weeks = new Map<number, { u: number; pm: number[]; t: number[]; p: number[]; idx: number }>();
   const t0 = toUTC(dens[0].date);
   for (const d of dens) {
@@ -248,28 +275,57 @@ export function envRegression(daily: { date: string; units: number }[], envDaily
     weeks.set(w, b);
   }
   const rows = [...weeks.values()].filter((w) => w.pm.length && w.t.length).sort((a, b) => a.idx - b.idx);
-  if (rows.length < 8) return null;
-  const y = rows.map((r) => r.u);
-  const pm = rows.map((r) => mean(r.pm)), tp = rows.map((r) => mean(r.t)), pr = rows.map((r) => mean(r.p)), tr = rows.map((r) => r.idx);
-  // มาตรฐานฟีเจอร์ (z-score) เพื่อให้ coefficient เทียบกันได้
-  const zfy = (a: number[]) => { const m = mean(a), s = std(a) || 1; return { z: a.map((x) => (x - m) / s), s }; };
-  const Y = zfy(y), PM = zfy(pm), TP = zfy(tp), PR = zfy(pr), TR = zfy(tr);
-  const X = rows.map((_, i) => [1, TR.z[i], PM.z[i], TP.z[i], PR.z[i]]);
-  const res = ols(X, Y.z);
+  if (rows.length < 10) return null;
+
+  const zfy = (a: number[]) => { const m = mean(a), s = std(a) || 1; return a.map((x) => (x - m) / s); };
+  const y = zfy(rows.map((r) => r.u));
+  const trend = zfy(rows.map((r) => r.idx));
+  // สร้างคอลัมน์: [1, trend, ...ปัจจัยอากาศที่อนุญาต]
+  const colDefs: { factor: string; label: string; vals: number[] }[] = [];
+  const fmap: Record<string, () => number[]> = {
+    pm2_5: () => rows.map((r) => mean(r.pm)),
+    temp_mean: () => rows.map((r) => mean(r.t)),
+    precip: () => rows.map((r) => mean(r.p)),
+  };
+  const FLABEL: Record<string, string> = { pm2_5: "ฝุ่น PM2.5", temp_mean: "อุณหภูมิ", precip: "ปริมาณฝน" };
+  for (const f of allowedFactors) colDefs.push({ factor: f, label: FLABEL[f], vals: zfy(fmap[f]()) });
+
+  const X = rows.map((_, i) => [1, trend[i], ...colDefs.map((c) => c.vals[i])]);
+  const res = olsFit(X, y);
   if (!res) return null;
-  const [, bTrend, bPm, bTemp, bPrecip] = res.coef;
-  const factors = [
-    { factor: "trend", label: "แนวโน้มเวลา", beta: bTrend },
-    { factor: "pm2_5", label: "ฝุ่น PM2.5", beta: bPm },
-    { factor: "temp_mean", label: "อุณหภูมิ", beta: bTemp },
-    { factor: "precip", label: "ปริมาณฝน", beta: bPrecip },
-  ].map((f) => ({ ...f, beta: +f.beta.toFixed(2), impact: Math.abs(f.beta) >= 0.3 ? "สูง" : Math.abs(f.beta) >= 0.15 ? "ปานกลาง" : "ต่ำ" }))
-    .sort((a, b) => Math.abs(b.beta) - Math.abs(a.beta));
-  const top = factors.find((f) => f.factor !== "trend" && Math.abs(f.beta) >= 0.15);
-  const summary = res.r2 >= 0.3
-    ? `โมเดลอธิบายยอดขายได้ ${Math.round(res.r2 * 100)}%${top ? ` • ปัจจัยเด่น: ${top.label} (${top.beta >= 0 ? "ยิ่งสูงยิ่งขายดี" : "ยิ่งสูงยิ่งขายน้อย"})` : ""}`
-    : `ยอดขายผูกกับปัจจัยแวดล้อม/เวลาไม่ชัด (R²=${Math.round(res.r2 * 100)}%) — น่าจะขับเคลื่อนด้วยแคมเปญ/ราคา`;
-  return { r2: +res.r2.toFixed(2), n: rows.length, terms: factors, summary };
+  const dfOK = rows.length - X[0].length; // degrees of freedom
+
+  const trendBeta = +res.coef[1].toFixed(2);
+  const trendT = res.se[1] > 0 ? res.coef[1] / res.se[1] : 0;
+
+  const terms: EnvTerm[] = colDefs.map((c, i) => {
+    const beta = res.coef[2 + i];
+    const t = res.se[2 + i] > 0 ? beta / res.se[2 + i] : 0;
+    const significant = Math.abs(t) >= 2 && dfOK >= 3;
+    return {
+      factor: c.factor, label: c.label, beta: +beta.toFixed(2), t: +t.toFixed(1), significant,
+      impact: !significant ? "ไม่สำคัญ" : Math.abs(beta) >= 0.3 ? "สูง" : Math.abs(beta) >= 0.15 ? "ปานกลาง" : "ต่ำ",
+      direction: beta >= 0 ? "ยิ่งสูงยิ่งขายดี" : "ยิ่งสูงยิ่งขายน้อย",
+    };
+  }).sort((a, b) => Math.abs(b.beta) - Math.abs(a.beta));
+
+  const significantDrivers = terms.filter((t) => t.significant);
+
+  let summary: string;
+  if (!weatherRelevant) {
+    summary = `สินค้าประเภท "${categoryLabel}" ไม่ได้ขึ้นกับสภาพอากาศ — ยอดขายขับเคลื่อนด้วย${trendBeta >= 0 ? "แนวโน้มขาขึ้น" : "แนวโน้มขาลง"}/แคมเปญ/รีวิว`;
+  } else if (significantDrivers.length) {
+    const top = significantDrivers[0];
+    summary = `ปัจจัยที่มีผลจริงทางสถิติ: ${top.label} (${top.direction}, t=${top.t}) • โมเดลอธิบายได้ ${Math.round(res.adjR2 * 100)}% (adj R²)`;
+  } else {
+    summary = `ทดสอบปัจจัยอากาศที่เกี่ยวข้องแล้ว ยังไม่พบนัยสำคัญทางสถิติ — ยอดขายช่วงนี้น่าจะมาจากแคมเปญ/ราคา/รีวิวมากกว่า`;
+  }
+
+  return {
+    r2: res.r2, adjR2: res.adjR2, n: rows.length, categoryLabel, weatherRelevant,
+    terms, significantDrivers, trendBeta, trendSignificant: Math.abs(trendT) >= 2,
+    summary,
+  };
 }
 
 // ---------- ปัจจัยแวดล้อม (correlation) ----------
@@ -288,14 +344,16 @@ export interface Driver { factor: "pm2_5" | "temp_mean" | "precip"; label: strin
 
 const FACTOR_LABEL = { pm2_5: "ฝุ่น PM2.5", temp_mean: "อุณหภูมิ", precip: "ปริมาณฝน" } as const;
 
-/** หา correlation ระหว่างยอดขายรายเดือน กับปัจจัยแวดล้อม → จัดอันดับปัจจัยที่สัมพันธ์สูงสุด */
-export function envDrivers(monthlyUnits: MonthPoint[], envMonthly: EnvMonthly[]): Driver[] {
+/** หา correlation ระหว่างยอดขายรายเดือน กับปัจจัยแวดล้อม → จัดอันดับปัจจัยที่สัมพันธ์สูงสุด
+ *  @param allowedFactors พิจารณาเฉพาะปัจจัยที่เกี่ยวข้องกับประเภทสินค้านี้ (กัน correlation ลวง) */
+export function envDrivers(monthlyUnits: MonthPoint[], envMonthly: EnvMonthly[], allowedFactors: Driver["factor"][] = ["pm2_5", "temp_mean", "precip"]): Driver[] {
+  if (!allowedFactors.length) return [];
   const envMap = new Map(envMonthly.map((e) => [e.month, e]));
   const actual = monthlyUnits.filter((m) => !m.isForecast);
   const pairs = actual.map((m) => ({ u: m.units, e: envMap.get(m.month) })).filter((p) => p.e);
   if (pairs.length < 4) return [];
   const units = pairs.map((p) => p.u);
-  const factors: Driver["factor"][] = ["pm2_5", "temp_mean", "precip"];
+  const factors: Driver["factor"][] = allowedFactors;
   const drivers: Driver[] = [];
   for (const f of factors) {
     const vals = pairs.map((p) => p.e![f]);

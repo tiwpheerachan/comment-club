@@ -14,11 +14,30 @@ body {
 
 /* การ์ดมาตรฐาน */
 .card {
-  @apply bg-white border border-line rounded-2xl shadow-card;
+  @apply bg-white border border-line/80 rounded-2xl shadow-card;
 }
 
 .card-pad {
   @apply p-5;
+}
+
+/* การ์ดในกริดที่ต้องสูงเท่ากันทั้งแถว (เนื้อหายืดเต็มความสูง) */
+.card-eq {
+  @apply card card-pad h-full flex flex-col;
+}
+
+/* หัวข้อการ์ด + เส้นคั่นบาง ให้ดูเป็นสัดส่วน/มืออาชีพ */
+.rail-head {
+  @apply text-[13px] font-bold text-ink flex items-center gap-2 mb-3 pb-2.5 border-b border-line/70;
+}
+
+/* หัวข้อกลุ่ม (section) พร้อมแถบสีแบรนด์ด้านหน้า */
+.group-title {
+  @apply flex items-center gap-2.5 mt-7 mb-3.5 text-[12.5px] font-bold uppercase tracking-wide text-ink/80;
+}
+.group-title::before {
+  content: "";
+  @apply w-1 h-4 rounded-full bg-shopee;
 }
 
 .section-title {
@@ -35,6 +54,11 @@ body {
 
 .kpi-label {
   @apply text-[11px] text-muted font-semibold uppercase tracking-wide flex items-center gap-1.5;
+}
+
+/* ตัวเลขสถิติเด่นในการ์ด */
+.stat {
+  @apply text-[26px] font-extrabold text-ink leading-none tracking-tight;
 }
 
 /* โลโก้ commentclub — เอฟเฟค "เขียนมือ" เผยจากซ้ายไปขวา วนทุก 10 วินาที */
