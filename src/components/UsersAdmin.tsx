@@ -1,8 +1,34 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { PAGES } from "@/lib/pages";
+import Avatar from "./Avatar";
 
-interface U { id: string; email: string; name: string; role: string; allowed_brands: string[]; allowed_pages: string[]; active: boolean }
+interface U { id: string; email: string; name: string; role: string; allowed_brands: string[]; allowed_pages: string[]; active: boolean; avatar_url: string | null }
+
+/** ย่อรูปฝั่ง client → data URL เล็ก (96px, jpeg) เพื่อเก็บในโปรไฟล์ */
+function fileToAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("อ่านไฟล์ไม่ได้"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("ไฟล์รูปไม่ถูกต้อง"));
+      img.onload = () => {
+        const S = 96;
+        const c = document.createElement("canvas");
+        c.width = S; c.height = S;
+        const ctx = c.getContext("2d");
+        if (!ctx) return reject(new Error("canvas ไม่พร้อม"));
+        const scale = Math.max(S / img.width, S / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+        resolve(c.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 const ROLES = [
   { v: "staff", label: "พนักงาน" },
   { v: "admin", label: "ผู้ดูแล" },
@@ -49,7 +75,10 @@ export default function UsersAdmin({ brands }: { brands: string[] }) {
         <h3 className="kpi-label mb-3">สร้างบัญชีพนักงานใหม่</h3>
         <div className="grid grid-cols-4 gap-2.5 max-[700px]:grid-cols-1">
           <input className={inp} placeholder="อีเมล" value={nf.email} onChange={(e) => setNf({ ...nf, email: e.target.value })} />
-          <input className={inp} placeholder="รหัสผ่านชั่วคราว" value={nf.password} onChange={(e) => setNf({ ...nf, password: e.target.value })} />
+          <div className="flex gap-1.5">
+            <input className={inp + " flex-1 min-w-0 font-mono"} placeholder="รหัสผ่านชั่วคราว" value={nf.password} onChange={(e) => setNf({ ...nf, password: e.target.value })} />
+            <button type="button" onClick={() => setNf({ ...nf, password: genPassword() })} title="สุ่มรหัส" className="px-2.5 rounded-lg border border-line text-sm flex-none">🎲</button>
+          </div>
           <input className={inp} placeholder="ชื่อ" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} />
           <select className={inp} value={nf.role} onChange={(e) => setNf({ ...nf, role: e.target.value })}>
             {ROLES.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}
@@ -84,10 +113,21 @@ export default function UsersAdmin({ brands }: { brands: string[] }) {
   );
 }
 
+function genPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const a = new Uint32Array(12);
+  (globalThis.crypto || window.crypto).getRandomValues(a);
+  return Array.from(a, (n) => chars[n % chars.length]).join("");
+}
+
 function RowGroup({ u, brands, open, onToggle, call }: { u: U; brands: string[]; open: boolean; onToggle: () => void; call: (m: string, b: object, ok: string) => Promise<boolean> }) {
+  const [name, setName] = useState(u.name || "");
   const [role, setRole] = useState(u.role);
   const [sel, setSel] = useState<string[]>(u.allowed_brands || []);
   const [pages, setPages] = useState<string[]>(u.allowed_pages || []);
+  const [pw, setPw] = useState("");
+  const [copied, setCopied] = useState("");
+  const copy = (text: string, what: string) => { navigator.clipboard?.writeText(text); setCopied(what); setTimeout(() => setCopied(""), 1500); };
   const roleLabel = ROLES.find((r) => r.v === u.role)?.label || u.role;
   const fullAccess = u.role === "super_admin" || u.role === "admin" || (u.allowed_brands || []).length === 0;
   const fullPages = u.role === "super_admin" || u.role === "admin" || (u.allowed_pages || []).length === 0;
@@ -98,7 +138,7 @@ function RowGroup({ u, brands, open, onToggle, call }: { u: U; brands: string[];
   return (
     <>
       <tr className="border-b border-[#eef0f3]">
-        <td className="p-3"><div className="font-medium">{u.name || "-"}</div><div className="text-muted text-xs">{u.email}</div></td>
+        <td className="p-3"><div className="flex items-center gap-2.5"><Avatar src={u.avatar_url} name={u.name} size={36} /><div><div className="font-medium">{u.name || "-"}</div><div className="text-muted text-xs">{u.email}</div></div></div></td>
         <td className="p-3">{roleLabel}</td>
         <td className="p-3 text-muted text-xs">
           <div>แบรนด์: {fullAccess ? "ทุกแบรนด์" : (u.allowed_brands || []).join(", ")}</div>
@@ -109,7 +149,32 @@ function RowGroup({ u, brands, open, onToggle, call }: { u: U; brands: string[];
       </tr>
       {open && (
         <tr className="bg-slate-50/60"><td colSpan={5} className="p-4">
+          {/* รูปโปรไฟล์ + ชื่อ + อีเมล + บทบาท */}
           <div className="flex flex-wrap items-start gap-5">
+            <div>
+              <div className="text-[12px] text-muted mb-1">รูปโปรไฟล์</div>
+              <div className="flex items-center gap-2.5">
+                <Avatar src={u.avatar_url} name={u.name} size={52} />
+                <div className="flex flex-col gap-1 text-left">
+                  <label className="text-[12px] text-shopee font-semibold cursor-pointer">
+                    {u.avatar_url ? "เปลี่ยนรูป" : "อัปโหลดรูป"}
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { const url = await fileToAvatar(f); await call("PATCH", { id: u.id, avatar_url: url }, "อัปเดตรูปแล้ว"); } catch { alert("อัปโหลดรูปไม่สำเร็จ"); } } e.target.value = ""; }} />
+                  </label>
+                  {u.avatar_url && <button onClick={() => call("PATCH", { id: u.id, avatar_url: null }, "ลบรูปแล้ว")} className="text-[12px] text-neg text-left">ลบรูป</button>}
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="text-[12px] text-muted mb-1">ชื่อพนักงาน</div>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อ-สกุล" className="border border-line rounded-lg px-2.5 py-1.5 text-sm w-52" />
+            </div>
+            <div>
+              <div className="text-[12px] text-muted mb-1">อีเมล (ใช้เข้าสู่ระบบ)</div>
+              <div className="flex items-center gap-2 border border-line rounded-lg px-2.5 py-1.5 bg-white">
+                <span className="text-sm text-ink font-medium select-all">{u.email}</span>
+                <button onClick={() => copy(u.email, "email")} className="text-shopee text-[11.5px] font-semibold">{copied === "email" ? "คัดลอกแล้ว ✓" : "คัดลอก"}</button>
+              </div>
+            </div>
             <div>
               <div className="text-[12px] text-muted mb-1">บทบาท</div>
               <select value={role} onChange={(e) => setRole(e.target.value)} className="border border-line rounded-lg px-2.5 py-1.5 text-sm">
@@ -133,10 +198,22 @@ function RowGroup({ u, brands, open, onToggle, call }: { u: U; brands: string[];
               ))}
             </div>
           </div>
+
+          {/* รหัสผ่าน — ดูค่าเดิมไม่ได้ (เข้ารหัสไว้) ตั้งใหม่แล้วคัดลอกให้พนักงาน */}
+          <div className="mt-3.5 p-3 rounded-xl bg-white border border-line">
+            <div className="text-[12px] text-ink font-semibold mb-1.5">รหัสผ่าน <span className="text-muted font-normal">— ดูรหัสเดิมไม่ได้ (ระบบเข้ารหัสไว้เพื่อความปลอดภัย) ตั้งรหัสใหม่แล้วคัดลอกให้พนักงาน</span></div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input value={pw} onChange={(e) => setPw(e.target.value)} placeholder="พิมพ์รหัสใหม่ หรือกดสุ่ม" className="border border-line rounded-lg px-2.5 py-1.5 text-sm w-56 font-mono" />
+              <button onClick={() => setPw(genPassword())} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-line">🎲 สุ่มรหัส</button>
+              {pw && <button onClick={() => copy(pw, "pw")} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-line text-shopee">{copied === "pw" ? "คัดลอกแล้ว ✓" : "คัดลอก"}</button>}
+              <button disabled={pw.length < 6} onClick={async () => { if (await call("PATCH", { id: u.id, password: pw }, "ตั้งรหัสผ่านใหม่แล้ว")) { /* คงค่าไว้ให้คัดลอก */ } }} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cc text-white disabled:opacity-40">ตั้งรหัสใหม่</button>
+              {pw.length > 0 && pw.length < 6 && <span className="text-[11px] text-neg">อย่างน้อย 6 ตัวอักษร</span>}
+            </div>
+          </div>
+
           <div className="flex items-center gap-2 mt-4 flex-wrap">
-            <button onClick={() => call("PATCH", { id: u.id, role, allowed_brands: sel, allowed_pages: pages }, "บันทึกแล้ว")} className="bg-shopee text-white px-3 py-1.5 rounded-lg text-xs font-semibold">บันทึก</button>
+            <button onClick={() => call("PATCH", { id: u.id, name: name.trim() || u.email, role, allowed_brands: sel, allowed_pages: pages }, "บันทึกแล้ว")} className="bg-shopee text-white px-3 py-1.5 rounded-lg text-xs font-semibold">บันทึกชื่อ/บทบาท/สิทธิ์</button>
             <button onClick={() => call("PATCH", { id: u.id, active: !u.active }, "เปลี่ยนสถานะแล้ว")} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-line">{u.active ? "ปิดบัญชี" : "เปิดบัญชี"}</button>
-            <button onClick={() => { const p = prompt("รหัสผ่านใหม่:"); if (p) call("PATCH", { id: u.id, password: p }, "เปลี่ยนรหัสผ่านแล้ว"); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-line">เปลี่ยนรหัสผ่าน</button>
             <button onClick={() => { if (confirm(`ลบบัญชี ${u.email}?`)) call("DELETE", { id: u.id }, "ลบบัญชีแล้ว"); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neg-bg text-neg ml-auto">ลบบัญชี</button>
           </div>
         </td></tr>

@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest) {
   const sb = await guard();
   if (!sb) return NextResponse.json({ error: "ต้องเป็น super admin" }, { status: 403 });
   try {
-    const { id, name, role, allowed_brands, allowed_pages, active, password } = await req.json();
+    const { id, name, role, allowed_brands, allowed_pages, active, password, avatar_url } = await req.json();
     if (!id) return NextResponse.json({ error: "ต้องมี id" }, { status: 400 });
     const patch: Record<string, unknown> = {};
     if (name !== undefined) patch.name = name;
@@ -50,6 +50,7 @@ export async function PATCH(req: NextRequest) {
     if (allowed_brands !== undefined) patch.allowed_brands = allowed_brands;
     if (allowed_pages !== undefined) patch.allowed_pages = allowed_pages;
     if (active !== undefined) patch.active = active;
+    if (avatar_url !== undefined) patch.avatar_url = avatar_url;
     if (Object.keys(patch).length) await sb.from("profiles").update(patch).eq("id", id);
     if (password) {
       const { error } = await sb.auth.admin.updateUserById(id, { password });

@@ -9,6 +9,7 @@ export interface Profile {
   allowed_brands: string[];
   allowed_pages: string[];
   active: boolean;
+  avatar_url?: string | null;
 }
 
 /** โปรไฟล์ของผู้ใช้ที่ล็อกอินอยู่ (จาก session) */

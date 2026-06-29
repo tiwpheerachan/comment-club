@@ -1,13 +1,13 @@
 // ============================================================
 //  ตัวเชื่อม Shopee Product API (ตอบกลับรีวิว/คอมเมนต์)
 //  Proxy: POST {BASE}/api/v1/shopee/reply-comment  (header X-API-Key)
-//  อ้างอิง: shopee-product-api.md (datacenter.shd-technology.co.th)
+//  อ้างอิง: shopee-product-api.md (api-center.shd-technology.co.th)
 // ============================================================
 
 export const REPLY_MAX_LEN = 500;   // Shopee จำกัดความยาวคำตอบ
 export const REPLY_MAX_BATCH = 100;  // Shopee จำกัดต่อ 1 คำขอ
 
-const DEFAULT_URL = "https://datacenter.shd-technology.co.th/api/v1/shopee/reply-comment";
+const DEFAULT_URL = "https://api-center.shd-technology.co.th/api/v1/shopee/reply-comment";
 export const SHOPEE_REPLY_URL = process.env.SHOPEE_REPLY_API_URL || DEFAULT_URL;
 export const SHOPEE_REPLY_KEY = process.env.SHOPEE_REPLY_API_KEY || "";
 

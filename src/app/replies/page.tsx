@@ -1,15 +1,16 @@
 import PageHeader from "@/components/PageHeader";
 import RepliesClient from "@/components/RepliesClient";
 import { NoAccess, NotReady } from "@/components/common";
-import { getCurrentProfile } from "@/lib/auth";
-import { getReplies, getReplyAgentStats } from "@/lib/db";
+import { allowedBrandsOf, getCurrentProfile } from "@/lib/auth";
+import { agentStatsFromReplies, getReplies } from "@/lib/db";
 import { canAccess } from "@/lib/pages";
 import { hasSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export default async function RepliesPage() {
-  if (!canAccess(await getCurrentProfile(), "replies")) return <NoAccess />;
+  const profile = await getCurrentProfile();
+  if (!canAccess(profile, "replies")) return <NoAccess />;
   if (!hasSupabase()) {
     return (
       <>
@@ -19,7 +20,9 @@ export default async function RepliesPage() {
     );
   }
 
-  const [replies, stats] = await Promise.all([getReplies({ limit: 1000 }), getReplyAgentStats()]);
+  // จำกัดสิทธิ์ตามแบรนด์อย่างเคร่งครัด — ทุกคนเห็น "ใครตอบอะไร" แต่เฉพาะแบรนด์ที่ตนมีสิทธิ์
+  const replies = await getReplies({ limit: 2000, brandsIn: allowedBrandsOf(profile) });
+  const stats = agentStatsFromReplies(replies);
 
   return (
     <>

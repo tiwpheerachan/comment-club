@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import type { ReplyAgentStat, ReplyRecord } from "@/lib/db";
 import { SentChip, ShopeeLink } from "./common";
 import { Chat, Check, Search } from "./icons";
+import Avatar from "./Avatar";
 import ProductThumb from "./ProductThumb";
 
 const fmtDate = (s: string | null) =>
@@ -49,7 +50,7 @@ export default function RepliesClient({ replies, stats }: { replies: ReplyRecord
               return (
                 <button key={a.name} onClick={() => setAgent(active ? "" : a.name)}
                   className={`card card-pad text-left transition ${active ? "ring-2 ring-shopee" : "hover:border-shopee/40"}`}>
-                  <div className="font-semibold text-ink truncate">{a.name}</div>
+                  <div className="flex items-center gap-2"><Avatar src={a.avatar} name={a.name} size={32} /><div className="font-semibold text-ink truncate">{a.name}</div></div>
                   <div className="text-[26px] font-extrabold text-shopee leading-none mt-1">{a.total}</div>
                   <div className="text-[12px] text-muted mt-1">ตอบกลับทั้งหมด</div>
                   <div className="flex items-center gap-2 mt-2 text-[11.5px] flex-wrap">
@@ -91,6 +92,7 @@ export default function RepliesClient({ replies, stats }: { replies: ReplyRecord
         {rows.map((r) => (
           <div key={r.comment_id} className="card card-pad">
             <div className="flex items-center gap-2 flex-wrap mb-2 text-[12px]">
+              <Avatar src={r.replier_avatar} name={r.replied_by} size={24} />
               <span className="font-semibold text-ink">{r.replied_by || "ไม่ระบุ"}</span>
               <StatusBadge status={r.status} />
               {r.sentiment && <SentChip s={r.sentiment} />}

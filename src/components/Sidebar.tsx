@@ -24,7 +24,7 @@ const NAV = [
 
 const ROLE_LABEL: Record<string, string> = { super_admin: "ผู้ดูแลระบบสูงสุด", admin: "ผู้ดูแล", staff: "พนักงาน" };
 
-export default function Sidebar({ user }: { user: { name: string | null; email: string | null; role: string; allowed_pages?: string[] } }) {
+export default function Sidebar({ user }: { user: { name: string | null; email: string | null; role: string; allowed_pages?: string[]; avatar_url?: string | null } }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   const display = user.name || user.email || "ผู้ใช้";
@@ -60,7 +60,9 @@ export default function Sidebar({ user }: { user: { name: string | null; email: 
 
       <div className="border-t border-line p-3">
         <div className="flex items-center gap-2.5">
-          <span className="w-8 h-8 rounded-full bg-cc text-white flex items-center justify-center text-[13px] font-bold flex-none">{display.charAt(0).toUpperCase()}</span>
+          {user.avatar_url
+            ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-none border border-line" />
+            : <span className="w-8 h-8 rounded-full bg-cc text-white flex items-center justify-center text-[13px] font-bold flex-none">{display.charAt(0).toUpperCase()}</span>}
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-semibold truncate">{display}</div>
             <div className="text-[10.5px] text-muted truncate">{ROLE_LABEL[user.role] || user.role}</div>

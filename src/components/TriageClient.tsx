@@ -5,6 +5,7 @@ import type { CommentRow } from "@/lib/db";
 import { fmtDateTime, fmtRelative, sevColors } from "@/lib/ui";
 import { SellerReplyBadge, ShopeeLink } from "./common";
 import { Chat, Star } from "./icons";
+import Avatar from "./Avatar";
 import ImageThumbs from "./ImageThumbs";
 import ProductThumb from "./ProductThumb";
 import ReplyBox from "./ReplyBox";
@@ -32,7 +33,9 @@ const SENTIMENTS = [
  { key: "positive", label: "เชิงบวก" },
 ];
 
-export default function TriageClient({ brands = [], team = [] }: { brands?: string[]; team?: string[] }) {
+export default function TriageClient({ brands = [], users = [] }: { brands?: string[]; users?: { name: string; avatar: string | null }[] }) {
+ const team = users.map((u) => u.name);
+ const userAvatar = new Map(users.map((u) => [u.name, u.avatar]));
  const [tab, setTab] = useState("new");
  const [brand, setBrand] = useState("");
  const [me, setMe] = useState("");
@@ -161,7 +164,7 @@ export default function TriageClient({ brands = [], team = [] }: { brands?: stri
  <span className="text-muted text-xs whitespace-nowrap">• {r.rating ?? "-"} <Star className="w-3 h-3 inline text-neu" /></span>
  <span className="chip !mb-0">{r.category || "-"}</span>
  {statusBadge(r.status)}
- {r.assignee && <span className="text-xs text-muted">ผู้รับผิดชอบ: {r.assignee}</span>}
+ {r.assignee && <span className="text-xs text-muted inline-flex items-center gap-1"><Avatar src={userAvatar.get(r.assignee) ?? null} name={r.assignee} size={18} /> {r.assignee}</span>}
  <span className="text-xs text-muted whitespace-nowrap" title={fmtDateTime(r.created_at)}>🕒 {fmtRelative(r.created_at)}</span>
  <ShopeeLink shopId={r.shop_id} itemId={r.product_name} className="ml-auto" />
  </div>

@@ -358,12 +358,46 @@ export interface ReplyRecord {
   created_at: string | null;        // เวลาที่ลูกค้าคอมเมนต์
   product_item_name: string | null;
   product_image: string | null;
+  replier_avatar: string | null;    // รูปโปรไฟล์ของผู้ตอบ
 }
 
-export interface ReplyAgentStat { name: string; sent: number; failed: number; draft: number; total: number; last_at: string | null }
+export interface SystemUser { id: string; name: string; email: string | null; avatar_url: string | null; role: string }
+/** ผู้ใช้จริงในระบบ (active) — ใช้ทำรายการมอบหมายงาน + จับคู่ avatar */
+export async function getSystemUsers(): Promise<SystemUser[]> {
+  const sb = getServiceClient();
+  if (!sb) return [];
+  const { data } = await sb.from("profiles").select("id, name, email, avatar_url, role").eq("active", true).order("name");
+  return (data ?? []).map((p) => ({ id: String(p.id), name: (p.name as string) || (p.email as string) || "ไม่ระบุ", email: (p.email as string) ?? null, avatar_url: (p.avatar_url as string) ?? null, role: (p.role as string) || "staff" }));
+}
+
+/** map ชื่อผู้ใช้ → avatar (สำหรับแสดงรูปคนตอบ/ผู้รับผิดชอบ) */
+async function avatarByName(sb: ReturnType<typeof getServiceClient>): Promise<Map<string, string>> {
+  const m = new Map<string, string>();
+  if (!sb) return m;
+  const { data } = await sb.from("profiles").select("name, avatar_url");
+  for (const p of data ?? []) if (p.name && p.avatar_url) m.set(String(p.name), String(p.avatar_url));
+  return m;
+}
+
+export interface ReplyAgentStat { name: string; sent: number; failed: number; draft: number; total: number; last_at: string | null; avatar: string | null }
+
+/** คำนวณสถิติรายผู้ตอบจากรายการตอบกลับ (ใช้เมื่อ scope ตามแบรนด์) */
+export function agentStatsFromReplies(replies: ReplyRecord[]): ReplyAgentStat[] {
+  const agg = new Map<string, ReplyAgentStat>();
+  for (const r of replies) {
+    const name = r.replied_by || "ไม่ระบุ";
+    const a = agg.get(name) ?? { name, sent: 0, failed: 0, draft: 0, total: 0, last_at: null, avatar: r.replier_avatar };
+    a.total++;
+    if (r.status === "sent") a.sent++; else if (r.status === "failed") a.failed++; else a.draft++;
+    if (r.updated_at && (!a.last_at || r.updated_at > a.last_at)) a.last_at = r.updated_at;
+    if (!a.avatar && r.replier_avatar) a.avatar = r.replier_avatar;
+    agg.set(name, a);
+  }
+  return [...agg.values()].sort((a, b) => b.total - a.total);
+}
 
 /** รายการตอบกลับทั้งหมด (กรองตามแอดมิน/สถานะ/ค้นหา) + ข้อมูลคอมเมนต์ */
-export async function getReplies(opts: { repliedBy?: string; status?: string; q?: string; limit?: number } = {}): Promise<ReplyRecord[]> {
+export async function getReplies(opts: { repliedBy?: string; status?: string; q?: string; limit?: number; brandsIn?: string[] | null } = {}): Promise<ReplyRecord[]> {
   const sb = getServiceClient();
   if (!sb) return [];
   let q = sb.from("comment_replies").select("comment_id, reply_text, status, replied_by, platform_response, updated_at").order("updated_at", { ascending: false }).limit(opts.limit ?? 500);
@@ -380,8 +414,9 @@ export async function getReplies(opts: { repliedBy?: string; status?: string; q?
     for (const c of cs ?? []) info.set(String(c.comment_id), { brand: c.brand as string, product_name: c.product_name as string, shop_id: c.shop_id as string, comment_text: c.comment_text as string, sentiment: c.sentiment as string, rating: c.rating as number, created_at: (c.created_at as string) ?? null });
   }
 
-  // ชื่อสินค้าจริง + รูป
+  // ชื่อสินค้าจริง + รูป + รูปผู้ตอบ
   const meta = await productMetaMap(sb, [...info.values()].map((c) => c.product_name));
+  const avatars = await avatarByName(sb);
   let rows: ReplyRecord[] = data.map((r) => {
     const c = info.get(String(r.comment_id));
     const m = c?.product_name ? meta.get(c.product_name) : null;
@@ -392,8 +427,14 @@ export async function getReplies(opts: { repliedBy?: string; status?: string; q?
       comment_text: c?.comment_text ?? null, sentiment: c?.sentiment ?? null, rating: c?.rating ?? null,
       created_at: c?.created_at ?? null,
       product_item_name: m?.name ?? null, product_image: m?.img ?? null,
+      replier_avatar: r.replied_by ? avatars.get(String(r.replied_by)) ?? null : null,
     };
   });
+  // จำกัดสิทธิ์ตามแบรนด์ (เคร่งครัด): ผู้ใช้ที่ถูกจำกัดเห็นเฉพาะแบรนด์ตน
+  if (opts.brandsIn && opts.brandsIn.length) {
+    const set = new Set(opts.brandsIn);
+    rows = rows.filter((r) => r.brand != null && set.has(r.brand));
+  }
   if (opts.q) {
     const t = opts.q.toLowerCase();
     rows = rows.filter((r) => (r.reply_text || "").toLowerCase().includes(t) || (r.comment_text || "").toLowerCase().includes(t));
@@ -411,7 +452,7 @@ export async function getReplyAgentStats(): Promise<ReplyAgentStat[]> {
     if (error || !data?.length) break;
     for (const r of data) {
       const name = (r.replied_by as string) || "ไม่ระบุ";
-      const a = agg.get(name) ?? { name, sent: 0, failed: 0, draft: 0, total: 0, last_at: null };
+      const a = agg.get(name) ?? { name, sent: 0, failed: 0, draft: 0, total: 0, last_at: null, avatar: null };
       a.total++;
       if (r.status === "sent") a.sent++;
       else if (r.status === "failed") a.failed++;

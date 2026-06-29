@@ -5,19 +5,37 @@ import { BigQuery } from "@google-cloud/bigquery";
 import { BIGQUERY, COLUMNS, CREATED_AT_EXPR, SELLER_REPLY_AT_EXPR, STD_FIELDS, TEXT_ONLY_WHERE } from "./config";
 import type { RawComment } from "./types";
 
-/** auto-detect service-account.json ที่รากโปรเจกต์ ถ้าไม่ได้ตั้ง GOOGLE_APPLICATION_CREDENTIALS */
+/** auto-detect service-account.json ที่รากโปรเจกต์
+ *  - ถ้า GOOGLE_APPLICATION_CREDENTIALS ตั้งไว้และไฟล์ "มีจริง" → ใช้ env ปกติ
+ *  - ถ้าตั้งไว้แต่ไฟล์ไม่มี (เช่น path /etc/secrets บน Render ที่ยังไม่อัปโหลด) → fallback ไฟล์ที่รากโปรเจกต์ */
 function keyFile(): string | undefined {
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return undefined; // ใช้ env ปกติ
+  const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (gac && existsSync(gac)) return undefined; // ใช้ env ปกติ (ไฟล์มีจริง)
   const local = resolve(process.cwd(), "service-account.json");
   return existsSync(local) ? local : undefined;
 }
 
+/** อ่าน credentials จาก env var (JSON ตรง ๆ หรือ base64) — สะดวกบน host ที่แนบไฟล์ไม่ได้ */
+function inlineCredentials(): Record<string, unknown> | undefined {
+  const raw = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GCP_SERVICE_ACCOUNT_JSON || "").trim();
+  if (!raw) return undefined;
+  try {
+    const json = raw.startsWith("{") ? raw : Buffer.from(raw, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch (e) {
+    throw new Error(`GOOGLE_SERVICE_ACCOUNT_JSON อ่านไม่ได้ (ต้องเป็น JSON หรือ base64 ของ JSON): ${e instanceof Error ? e.message : e}`);
+  }
+}
+
 function client(): BigQuery {
-  return new BigQuery({
+  const opts: ConstructorParameters<typeof BigQuery>[0] = {
     projectId: BIGQUERY.projectId,
     location: BIGQUERY.location,
-    keyFilename: keyFile(),
-  });
+  };
+  const cred = inlineCredentials();
+  if (cred) opts.credentials = cred;            // ลำดับแรก: env var
+  else opts.keyFilename = keyFile();            // ไม่งั้น: ไฟล์ (รากโปรเจกต์ / GAC)
+  return new BigQuery(opts);
 }
 
 /** สร้าง SELECT โดย alias เป็นชื่อมาตรฐาน ข้ามคอลัมน์ที่ไม่ได้ตั้งค่า */
