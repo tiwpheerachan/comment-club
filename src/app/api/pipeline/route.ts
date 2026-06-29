@@ -33,13 +33,13 @@ function authorized(req: NextRequest): boolean {
   return false;
 }
 
-async function handle(req: NextRequest) {
+async function handle(req: NextRequest, light: boolean) {
   if (!authorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    const result = await runPipeline();
-    return NextResponse.json({ ok: true, ...result });
+    const result = await runPipeline({ light });
+    return NextResponse.json({ ok: true, light, ...result });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[api/pipeline]", msg);
@@ -47,11 +47,12 @@ async function handle(req: NextRequest) {
   }
 }
 
+// ปุ่มบนเว็บ (same-origin POST) → โหมดเบา (เร็ว เลี่ยง 502); ใส่ ?full=1 เพื่อรันเต็ม
 export async function POST(req: NextRequest) {
-  return handle(req);
+  return handle(req, req.nextUrl.searchParams.get("full") !== "1");
 }
 
-// รองรับ cron ที่ยิงแบบ GET (Render Cron / Vercel Cron / GitHub Action)
+// cron ที่ยิงแบบ GET (Render/Vercel/GitHub Action) → รันเต็ม; ใส่ ?light=1 เพื่อรันเบา
 export async function GET(req: NextRequest) {
-  return handle(req);
+  return handle(req, req.nextUrl.searchParams.get("light") === "1");
 }

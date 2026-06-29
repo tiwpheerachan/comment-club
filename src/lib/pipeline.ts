@@ -291,7 +291,12 @@ async function syncGmv(sb: SupabaseClient, force = false): Promise<void> {
   console.log(`[pipeline] sync GMV ${rows.length} แถว`);
 }
 
-export async function runPipeline(): Promise<RunResult> {
+/**
+ * @param opts.light = true → ทำเฉพาะ "ดึง+วิเคราะห์คอมเมนต์ + สรุป" (เร็ว, สำหรับปุ่มบนหน้าเว็บ)
+ *   ข้ามงานหนักจาก BigQuery (สินค้า/retention/GMV/อากาศ/พยากรณ์) ที่ใช้เวลานานจน Render 502
+ *   → งานหนักให้ cron รายวันทำ (npm run pipeline = full)
+ */
+export async function runPipeline(opts: { light?: boolean } = {}): Promise<RunResult> {
   const sb = getServiceClient();
   if (!sb) {
     throw new Error(
@@ -343,33 +348,38 @@ export async function runPipeline(): Promise<RunResult> {
     // 3) คำนวณ summary จากหน้าต่างเวลา (อ่านจาก Supabase ไม่แตะ BigQuery)
     const windowComments = await loadWindow(sb, PIPELINE.windowDays);
 
-    // 3.5) sync metadata สินค้า (ชื่อ/SKU/รูป/ราคา) จาก shopee_items สำหรับ item ทั้งหมดที่มีคอมเมนต์
-    await syncProducts(sb, await allProductIds(sb));
-
-    // 3.6) sync Customer Retention (จาก shopee_orders)
-    try {
-      await syncRetention(sb);
-    } catch (e) {
-      console.error("[pipeline] sync retention ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-    }
-
-    // 3.7) sync ยอดขายรายวัน (Forecasting)
-    try {
-      await syncGmv(sb);
-    } catch (e) {
-      console.error("[pipeline] sync GMV ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-    }
-
-    // 3.8) sync ปัจจัยแวดล้อม + พยากรณ์สินค้า/สต๊อก
-    try {
-      await syncEnv(sb);
-    } catch (e) {
-      console.error("[pipeline] sync env ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-    }
-    try {
-      await syncProductForecast(sb);
-    } catch (e) {
-      console.error("[pipeline] sync product forecast ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+    // 3.5–3.8) งานหนักจาก BigQuery (สินค้า/retention/GMV/อากาศ/พยากรณ์)
+    //   ข้ามในโหมดเบา (ปุ่มบนเว็บ) เพื่อไม่ให้ request นานจน Render 502 — ให้ cron รายวันทำแทน
+    if (!opts.light) {
+      // 3.5) sync metadata สินค้า (ชื่อ/SKU/รูป/ราคา)
+      try {
+        await syncProducts(sb, await allProductIds(sb));
+      } catch (e) {
+        console.error("[pipeline] sync products ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+      }
+      // 3.6) sync Customer Retention (จาก shopee_orders)
+      try {
+        await syncRetention(sb);
+      } catch (e) {
+        console.error("[pipeline] sync retention ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+      }
+      // 3.7) sync ยอดขายรายวัน (Forecasting)
+      try {
+        await syncGmv(sb);
+      } catch (e) {
+        console.error("[pipeline] sync GMV ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+      }
+      // 3.8) sync ปัจจัยแวดล้อม + พยากรณ์สินค้า/สต๊อก
+      try {
+        await syncEnv(sb);
+      } catch (e) {
+        console.error("[pipeline] sync env ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+      }
+      try {
+        await syncProductForecast(sb);
+      } catch (e) {
+        console.error("[pipeline] sync product forecast ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+      }
     }
 
     const summary = aggregate(windowComments, PIPELINE.windowDays);

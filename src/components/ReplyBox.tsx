@@ -33,9 +33,10 @@ export default function ReplyBox({ comment, onSent, openLabel = "ตอบกล
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment_id: comment.comment_id, reply_text: text, replied_by: getAdminName() || null }),
       });
-      const j = await res.json();
+      // อ่านแบบทนทาน: ถ้า response ไม่ใช่ JSON (เช่นหน้า 502 ของ Render) จะไม่โยน error ลึกลับ
+      const j = await res.json().catch(() => ({} as { ok?: boolean; message?: string; error?: string }));
       const ok = res.ok && j.ok !== false;
-      setMsg({ text: ok ? j.message : (j.message || "ผิดพลาด: " + (j.error || res.status)), ok });
+      setMsg({ text: ok ? (j.message || "ส่งสำเร็จ") : (j.message || "ผิดพลาด: " + (j.error || `เซิร์ฟเวอร์ตอบ HTTP ${res.status}`)), ok });
       if (ok) setTimeout(() => onSent?.(), 900);
     } catch (e) { setMsg({ text: "ผิดพลาด: " + (e instanceof Error ? e.message : e), ok: false }); }
     setSending(false);
