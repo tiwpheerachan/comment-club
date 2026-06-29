@@ -15,9 +15,12 @@ envVarGroups:
         sync: false
       - key: WINDOW_DAYS
         value: "30"
-      # BigQuery service account — วางเนื้อ JSON ทั้งก้อน (หรือ base64) ใน Dashboard (sync:false)
-      #   (วิธีเดิมแบบ Secret File ที่ /etc/secrets/service-account.json ก็ยังใช้ได้ถ้าอัปโหลดไฟล์
-      #    แล้วเพิ่ม GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/service-account.json เอง)
+      # BigQuery service account — เลือกวิธีใดวิธีหนึ่ง (ตั้งใน Dashboard):
+      #  วิธี A (แนะนำ/ชัวร์สุด): อัปโหลด Secret File ชื่อ "service-account.json"
+      #     → จะ mount เป็น /etc/secrets/service-account.json ตรงกับ GAC ด้านล่าง
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/service-account.json
+      #  วิธี B: วางเนื้อ JSON (หรือ base64) เป็น env var sync:false — ไม่ต้องมีไฟล์
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
       # Shopee reply proxy (ตอบกลับคอมเมนต์)
