@@ -27,14 +27,23 @@ function inlineCredentials(): Record<string, unknown> | undefined {
   }
 }
 
+let credLogged = false;
 function client(): BigQuery {
   const opts: ConstructorParameters<typeof BigQuery>[0] = {
     projectId: BIGQUERY.projectId,
     location: BIGQUERY.location,
   };
   const cred = inlineCredentials();
-  if (cred) opts.credentials = cred;            // ลำดับแรก: env var
-  else opts.keyFilename = keyFile();            // ไม่งั้น: ไฟล์ (รากโปรเจกต์ / GAC)
+  let source: string;
+  if (cred) {
+    opts.credentials = cred;                    // ลำดับแรก: env var
+    source = `GOOGLE_SERVICE_ACCOUNT_JSON (client_email=${String(cred.client_email ?? "?")})`;
+  } else {
+    const kf = keyFile();                        // ไม่งั้น: ไฟล์ (รากโปรเจกต์ / GAC)
+    if (kf) opts.keyFilename = kf;
+    source = kf ? `keyFile=${kf}` : `ADC / GOOGLE_APPLICATION_CREDENTIALS=${process.env.GOOGLE_APPLICATION_CREDENTIALS ?? "(ไม่ได้ตั้ง)"}`;
+  }
+  if (!credLogged) { console.log(`[bigquery] ใช้ credential จาก: ${source} • project=${BIGQUERY.projectId}`); credLogged = true; }
   return new BigQuery(opts);
 }
 
