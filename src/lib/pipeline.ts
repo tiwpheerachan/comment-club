@@ -299,50 +299,64 @@ async function syncGmv(sb: SupabaseClient, force = false): Promise<void> {
 export async function runPipeline(opts: { light?: boolean } = {}): Promise<RunResult> {
   const sb = getServiceClient();
   if (!sb) {
+    // หมายเหตุ: ถ้าเกิดที่นี่ จะ "ไม่มี" row ใน pipeline_runs เลย (เขียน Supabase ไม่ได้) —
+    // ดูสาเหตุได้จาก log ของ service เท่านั้น มักเป็นเพราะ env ของ service นั้นยังไม่ตั้ง
     throw new Error(
-      "ยังไม่ได้ตั้งค่า Supabase (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) — pipeline ต้องใช้ Supabase"
+      "ยังไม่ได้ตั้งค่า Supabase — service นี้ขาด env NEXT_PUBLIC_SUPABASE_URL (หรือ SUPABASE_URL) และ/หรือ SUPABASE_SERVICE_ROLE_KEY"
     );
   }
 
-  const { data: runRow } = await sb
+  const warnings: string[] = [];
+  const { data: runRow, error: insErr } = await sb
     .from("pipeline_runs")
     .insert({ status: "running" })
     .select("id")
     .single();
+  if (insErr) console.error("[pipeline] insert pipeline_runs ไม่สำเร็จ (รันต่อแบบไม่มี run log):", insErr.message);
   const runId = runRow?.id;
 
   try {
-    // 1) watermark + ดึงเฉพาะใหม่
-    const watermark = await getWatermark(sb);
-    const fresh = await fetchNewComments({
-      sinceTimestamp: watermark,
-      backfillDays: PIPELINE.initialBackfillDays,
-      limit: PIPELINE.maxPerRun,
-    });
-    console.log(`[pipeline] watermark=${watermark ?? "(backfill)"} ดึงใหม่ ${fresh.length} คอมเมนต์`);
-
-    // 2) วิเคราะห์ + upsert (เฉพาะที่ใหม่)
+    // 1–2) ดึง+วิเคราะห์คอมเมนต์ใหม่ (best-effort)
+    //   ถ้า BigQuery/AI ล่ม ให้บันทึกเป็น warning แล้วไปคำนวณ snapshot จากข้อมูลเดิมต่อ
+    //   (ไม่ปล่อยให้ทั้ง run ตาย จนเสีย daily snapshot/metrics ของวันนั้น)
+    let fetchedCount = 0;
     let analyzedCount = 0;
-    let newWatermark: string | null = watermark;
-    if (fresh.length) {
-      let lastLogged = 0;
-      const analyzed = await analyze(fresh, (d, t) => {
-        if (d - lastLogged >= 200 || d === t) {
-          lastLogged = d;
-          console.log(`[pipeline] วิเคราะห์ ${d}/${t}`);
-        }
+    let newWatermark: string | null = null;
+    try {
+      const watermark = await getWatermark(sb);
+      newWatermark = watermark;
+      const fresh = await fetchNewComments({
+        sinceTimestamp: watermark,
+        backfillDays: PIPELINE.initialBackfillDays,
+        limit: PIPELINE.maxPerRun,
       });
-      analyzedCount = analyzed.length;
-      const rows = analyzed.map(toRow);
-      for (let i = 0; i < rows.length; i += 500) {
-        const chunk = rows.slice(i, i + 500);
-        const { error } = await sb.from("comments").upsert(chunk, { onConflict: "comment_id" });
-        if (error) throw new Error(`upsert comments ไม่สำเร็จ: ${error.message}`);
+      fetchedCount = fresh.length;
+      console.log(`[pipeline] watermark=${watermark ?? "(backfill)"} ดึงใหม่ ${fresh.length} คอมเมนต์`);
+
+      if (fresh.length) {
+        let lastLogged = 0;
+        const analyzed = await analyze(fresh, (d, t) => {
+          if (d - lastLogged >= 200 || d === t) {
+            lastLogged = d;
+            console.log(`[pipeline] วิเคราะห์ ${d}/${t}`);
+          }
+        });
+        analyzedCount = analyzed.length;
+        const rows = analyzed.map(toRow);
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+          const { error } = await sb.from("comments").upsert(chunk, { onConflict: "comment_id" });
+          if (error) throw new Error(`upsert comments ไม่สำเร็จ: ${error.message}`);
+        }
+        newWatermark = fresh.reduce<string | null>((max, c) => {
+          if (c.created_at && (!max || c.created_at > max)) return c.created_at;
+          return max;
+        }, watermark);
       }
-      newWatermark = fresh.reduce<string | null>((max, c) => {
-        if (c.created_at && (!max || c.created_at > max)) return c.created_at;
-        return max;
-      }, watermark);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      warnings.push(`ดึง/วิเคราะห์คอมเมนต์ใหม่ล้มเหลว: ${m}`);
+      console.error("[pipeline] ดึง/วิเคราะห์ล้มเหลว (ใช้ข้อมูลเดิมคำนวณ snapshot ต่อ):", m);
     }
 
     // 3) คำนวณ summary จากหน้าต่างเวลา (อ่านจาก Supabase ไม่แตะ BigQuery)
@@ -351,34 +365,22 @@ export async function runPipeline(opts: { light?: boolean } = {}): Promise<RunRe
     // 3.5–3.8) งานหนักจาก BigQuery (สินค้า/retention/GMV/อากาศ/พยากรณ์)
     //   ข้ามในโหมดเบา (ปุ่มบนเว็บ) เพื่อไม่ให้ request นานจน Render 502 — ให้ cron รายวันทำแทน
     if (!opts.light) {
-      // 3.5) sync metadata สินค้า (ชื่อ/SKU/รูป/ราคา)
-      try {
-        await syncProducts(sb, await allProductIds(sb));
-      } catch (e) {
-        console.error("[pipeline] sync products ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-      }
-      // 3.6) sync Customer Retention (จาก shopee_orders)
-      try {
-        await syncRetention(sb);
-      } catch (e) {
-        console.error("[pipeline] sync retention ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-      }
-      // 3.7) sync ยอดขายรายวัน (Forecasting)
-      try {
-        await syncGmv(sb);
-      } catch (e) {
-        console.error("[pipeline] sync GMV ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-      }
-      // 3.8) sync ปัจจัยแวดล้อม + พยากรณ์สินค้า/สต๊อก
-      try {
-        await syncEnv(sb);
-      } catch (e) {
-        console.error("[pipeline] sync env ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
-      }
-      try {
-        await syncProductForecast(sb);
-      } catch (e) {
-        console.error("[pipeline] sync product forecast ล้มเหลว (ข้ามไปก่อน):", e instanceof Error ? e.message : e);
+      // แต่ละงานหนัก best-effort: ล้มเหลวก็บันทึกเป็น warning แล้วไปต่อ (ไม่ทำให้ทั้ง run พัง)
+      const heavy: [string, () => Promise<unknown>][] = [
+        ["sync products", async () => syncProducts(sb, await allProductIds(sb))], // ชื่อ/SKU/รูป/ราคา
+        ["sync retention", () => syncRetention(sb)],                              // Customer Retention (shopee_orders)
+        ["sync GMV", () => syncGmv(sb)],                                          // ยอดขายรายวัน (Forecasting)
+        ["sync env", () => syncEnv(sb)],                                          // ปัจจัยแวดล้อม
+        ["sync product forecast", () => syncProductForecast(sb)],                 // พยากรณ์สินค้า/สต๊อก
+      ];
+      for (const [label, task] of heavy) {
+        try {
+          await task();
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          warnings.push(`${label} ล้มเหลว: ${m}`);
+          console.error(`[pipeline] ${label} ล้มเหลว (ข้ามไปก่อน):`, m);
+        }
       }
     }
 
@@ -407,22 +409,25 @@ export async function runPipeline(opts: { light?: boolean } = {}): Promise<RunRe
     );
     if (dmErr) throw new Error(`อัปเดต daily_metrics ไม่สำเร็จ: ${dmErr.message}`);
 
-    // 6) ปิด run log
+    // 6) ปิด run log — ถ้ามี warning (เช่น BigQuery ล่ม แต่ snapshot ยังอัปเดตได้) บันทึกไว้ให้เห็น
+    const runMessage = warnings.length ? warnings.join(" | ") : null;
     if (runId != null) {
       await sb
         .from("pipeline_runs")
         .update({
           finished_at: new Date().toISOString(),
-          status: "success",
-          fetched: fresh.length,
+          status: warnings.length ? "partial" : "success",
+          fetched: fetchedCount,
           analyzed: analyzedCount,
           watermark: newWatermark,
+          message: runMessage,
         })
         .eq("id", runId);
     }
+    if (warnings.length) console.warn(`[pipeline] เสร็จแบบมี ${warnings.length} warning`);
 
     return {
-      fetched: fresh.length,
+      fetched: fetchedCount,
       analyzed: analyzedCount,
       watermark: newWatermark,
       total_in_window: summary.total_comments,
